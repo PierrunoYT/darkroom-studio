@@ -93,8 +93,9 @@ def _preset(model: str):
         return 1024, 8, 1, "euler", "simple"
     if is_qwen_image(model):  # ComfyUI's Qwen-Image 2.1 template
         return 1024, 25, 1, "euler", "simple"
-    if is_zimage(model):  # ComfyUI's Z-Image Turbo template
-        return 1024, 8, 1, "res_multistep", "simple"
+    if is_zimage(model):  # ComfyUI's Z-Image Turbo and Z-Image base templates
+        return (1024, 8, 1, "res_multistep", "simple") if "turbo" in model.lower() \
+            else (1024, 25, 4, "res_multistep", "simple")
     if "xl" in model.lower():
         return 1024, 25, 7, "euler", "normal"
     return 512, 20, 7, "euler", "normal"

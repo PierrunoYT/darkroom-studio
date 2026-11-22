@@ -26,9 +26,12 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/z_image_turbo", "split_files/diffusion_models/z_image_turbo_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/z_image_turbo", "split_files/text_encoders/qwen_3_4b.safetensors"),
     ("vae", "Comfy-Org/z_image_turbo", "split_files/vae/ae.safetensors"),
+    # Z-Image base (25 steps, CFG 4); shares the text encoder and VAE above (about 12 GB)
+    ("diffusion_models", "Comfy-Org/z_image", "split_files/diffusion_models/z_image_bf16.safetensors"),
     # FLUX 3 Image Klein, distilled, bf16, with its prompt upsampler (about 38 GB). The repo is gated: accept the
     # license on Hugging Face, then store a token as the Modal secret "huggingface" (HF_TOKEN=hf_...).
     ("diffusion_models", FLUX3, "diffusion_models/flux3-image-klein-bf16.safetensors"),
+    ("diffusion_models", FLUX3, "diffusion_models/flux3-image-klein-base-bf16.safetensors"),  # base: 50 steps, CFG 3.5
     ("text_encoders", FLUX3, "text_encoders/qwen3vl_4b_bf16.safetensors"),
     ("text_encoders", FLUX3, "text_encoders/qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors"),
     ("vae", FLUX3, "vae/flux2-vae.safetensors"),

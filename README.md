@@ -67,6 +67,11 @@ ComfyUI/models/vae/ae.safetensors
 Darkroom lists any diffusion model whose name contains `z_image` and expects the text encoder and VAE under these
 names. Z-Image needs a GPU with about 16 GB or more of VRAM at bf16.
 
+Z-Image base (`z_image_bf16.safetensors` from
+[Comfy-Org/z_image](https://huggingface.co/Comfy-Org/z_image/tree/main/split_files/diffusion_models), 12 GB) uses the
+same text encoder and VAE. Picking it sets 25 steps and CFG 4, so the negative prompt takes effect; it is slower than
+Turbo and more varied.
+
 For FLUX 3 Image Klein, accept the license at
 [black-forest-labs/flux-3-image-klein-comfy](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy)
 (gated, FLUX Kommunity License) and download (about 38 GB):
@@ -116,7 +121,7 @@ generating.
 ```sh
 uv sync --extra modal
 uv run modal setup                                           # once: sign in to Modal
-uv run modal run modal_comfyui.py::download                  # SD 1.5, SDXL, Z-Image, FLUX 3, Qwen-Image into a Volume
+uv run modal run modal_comfyui.py::download                  # SD 1.5, SDXL and the newest models into a Volume
 uv run modal deploy modal_comfyui.py                         # prints https://<workspace>--darkroom-comfyui-comfyui.<region>.modal.run
 uv run modal workspace proxy-tokens create --name darkroom   # prints a token ID (wk-…) and secret (ws-…), shown only once
 

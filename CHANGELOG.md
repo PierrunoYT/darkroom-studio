@@ -28,6 +28,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Qwen-Image 2.1 prompt enhancer, off by default as in ComfyUI's template: the Qwen3.5 9B enhancer rewrites the
   prompt with reasoning on, and the Expand prompt toggle now covers both FLUX 3 and Qwen-Image.
 - The Modal download step also fetches the Qwen-Image 2.1 Turbo checkpoint and the prompt enhancer.
+- Z-Image base: picking `z_image_bf16` sets ComfyUI's base template settings (25 steps, CFG 4, `res_multistep`,
+  `simple`) instead of the Turbo ones.
+- The Modal download step also fetches Z-Image base and the FLUX 3 Klein base checkpoint.
 
 - Images are saved to `~/Pictures/Darkroom` (or `DARKROOM_OUTPUT_DIR`) as PNGs with the generation settings
   embedded, and the contact sheet shows that folder, newest first, across restarts. Clicking an image shows its
