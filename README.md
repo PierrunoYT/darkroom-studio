@@ -171,6 +171,23 @@ above). Turn it off only when you write the JSON yourself; see Ideogram's
 [prompting guide](https://github.com/ideogram-oss/ideogram4/blob/main/docs/prompting.md). Ideogram 4 is under the
 Ideogram **non-commercial** model agreement.
 
+For Ming Image 0.1 Design, a 6B model from inclusionAI tuned for UI screens, posters, infographics and other
+text-heavy layouts (MIT), download (about 26 GB) from [Comfy-Org/Ming-Image](https://huggingface.co/Comfy-Org/Ming-Image):
+
+```
+ComfyUI/models/diffusion_models/ming_image_0.1_design_int8_convrot.safetensors
+ComfyUI/models/text_encoders/ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors
+ComfyUI/models/vae/ming_image_vae_bf16.safetensors
+```
+
+Darkroom lists any diffusion model whose name contains `ming_image` and builds the graph from ComfyUI's templates:
+12 steps without CFG (so no negative prompt), INT8 attention, and for text-to-image the authors' rewriter
+(**Expand prompt with the Ming rewriter**, on by default) that turns a short idea into a layered layout caption. The
+template runs the rewriter on Qwen3.8 27B, which writes about one token a second on an L40S, so an image would take
+most of an hour; Darkroom runs it on MOSS-Image's Qwen3.5 9B text encoder (`qwen3.5_9b_bf16.safetensors`) instead.
+Put the text you want rendered in quotes. Picking it sets 1024; the templates get their best quality at 2048. It also
+edits, with up to 8 images; refer to them as *the first image*, *the second image*.
+
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),
 [FireRed-Image-Edit-1.0-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.0-ComfyUI) and
@@ -286,6 +303,7 @@ src/darkroom/qwen_image_pe_prompt.txt    system prompt for the Qwen-Image 2.1 pr
 src/darkroom/qwen_image_edit_pe_prompt.txt  system prompt for the Qwen-Image 2.1 edit enhancer (ComfyUI template)
 src/darkroom/moss_image_pe_prompt.txt    system prompt for the MOSS-Image upsampler (ComfyUI template)
 src/darkroom/ideogram4_pe_prompt.txt     system prompt for the Ideogram 4 JSON captioner (ComfyUI template)
+src/darkroom/ming_image_pe_prompt.txt    system prompt for the Ming Image rewriter (ComfyUI template)
 modal_comfyui.py         ComfyUI on a Modal GPU
 ```
 

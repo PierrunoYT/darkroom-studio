@@ -11,9 +11,9 @@ import gradio as gr
 from PIL import Image, PngImagePlugin
 from websocket import WebSocketException
 
-from darkroom.comfy import (FIRERED_MAX_IMAGES, LIGHTNING, ComfyClient, ComfyError, Params, build_workflow, can_edit,
+from darkroom.comfy import (FIRERED_MAX_IMAGES, LIGHTNING, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_sd3,
+                            is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -87,8 +87,10 @@ def presets(model: str | None):
     # On by default for FLUX 3 and MOSS-Image (their workflows), off for Qwen-Image (ComfyUI's template; it adds a
     # slow rewrite).
     name = "FLUX 3 upsampler" if is_flux3(model) else "MOSS-Image upsampler" if is_moss(model) \
-        else "Ideogram JSON captioner" if is_ideogram(model) else "Qwen-Image enhancer"
-    upsampler = gr.update(visible=can_expand(model), value=is_flux3(model) or is_moss(model) or is_ideogram(model),
+        else "Ideogram JSON captioner" if is_ideogram(model) else "Ming rewriter" if is_ming(model) \
+        else "Qwen-Image enhancer"
+    upsampler = gr.update(visible=can_expand(model),
+                          value=is_flux3(model) or is_moss(model) or is_ideogram(model) or is_ming(model),
                           label=f"Expand prompt with the {name}")
     return (*_preset(model), upsampler)
 
@@ -96,6 +98,8 @@ def presets(model: str | None):
 def _preset(model: str):
     if is_flux3(model):  # Black Forest Labs' FLUX 3 Klein workflows
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
+    if is_ming(model):  # ComfyUI's Ming Image 0.1 Design templates (2048 is their best size, 1024 faster)
+        return 1024, 12, 1, "euler", "simple"
     if is_ideogram(model):  # ComfyUI's Ideogram 4 template, Default preset (12 steps picks Turbo, 48 Quality)
         return 1024, 20, 7, "euler", "simple"
     if is_firered(model):  # ComfyUI's FireRed Image Edit 1.1 template, with and without the Lightning LoRA
@@ -180,11 +184,11 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
         raise gr.Error("FireRed Image Edit only edits: drop an image in the Edit tab.")
     if edit_image is not None:
         if not can_edit(ckpt):
-            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein or FireRed Image Edit. Pick one of them, or "
+            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image or FireRed Image Edit. Pick one of them, or "
                            "clear the Edit tab.")
         if init_image is not None:
             raise gr.Error("Use either the Img2img tab or the Edit tab, not both.")
-        limit = FIRERED_MAX_IMAGES if is_firered(ckpt) else 10
+        limit = FIRERED_MAX_IMAGES if is_firered(ckpt) else MING_MAX_IMAGES if is_ming(ckpt) else 10
         if 1 + len(edit_refs) > limit:
             raise gr.Error(f"This model edits with up to {limit} images in total.")
         # The result keeps the edited image's shape, at about base x base pixels.
@@ -206,7 +210,7 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
             edit_images=edit_names,
         )
         expanded = gr.update(visible=False)
-        if can_expand(ckpt) and upsample:
+        if can_expand(ckpt) and upsample and not (edit_names and is_ming(ckpt)):
             expanded = gr.update(value="Expanding the prompt…", visible=True)
         mode = "edit" if edit_names else "img2img" if init_name else "txt2img"
         yield gr.update(), gr.update(), f"⏳ Queued {mode} · {width}×{height} · seed {seed}", seed, expanded
@@ -280,7 +284,7 @@ def build_ui() -> gr.Blocks:
                         denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
                                             info="Lower keeps more of the init image")
                     with gr.Tab("Edit", id="edit"):
-                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein and FireRed Image Edit only. Write what to change as the prompt, "
+                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image and FireRed Image Edit only. Write what to change as the prompt, "
                                     "such as *make the boat red*. The result keeps this image's shape.")
                         edit_image = gr.Image(label="Image to edit", type="pil", height=260)
                         edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,
@@ -288,7 +292,7 @@ def build_ui() -> gr.Blocks:
                                                elem_id="edit_refs")
                         gr.Markdown("With Qwen-Image, refer to the images as `<image1>`, `<image2>`, …; with FLUX 3, "
                                     "as *the first image*, *the second image*; with FireRed, as *Picture 1*, *Picture 2*. "
-                                    "Up to 10 images in total (3 with FireRed).",
+                                    "Up to 10 images in total (8 with Ming, 3 with FireRed).",
                                     elem_classes="hint")
                     with gr.Tab("Connection"):
                         url = gr.Textbox(label="ComfyUI URL", value=DEFAULT_URL)

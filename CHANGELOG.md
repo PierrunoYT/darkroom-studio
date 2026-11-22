@@ -64,6 +64,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   download step fetches it.
 - The Ideogram 4 captioner no longer picks a transparent background on its own: Darkroom adds a rule to the template's
   caption prompt so it uses one only when the prompt asks for it.
+- Ming Image 0.1 Design (MIT), following ComfyUI's templates: the Ling text encoder, INT8 attention, Flux-style shift
+  and 12 steps without CFG. Text-to-image runs the authors' layout rewriter first (on by default), on the Qwen3.5 9B encoder because the template's Qwen3.8 27B is too slow;
+  edits take up to 8 images and sample with LCM. The Modal download step fetches it.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

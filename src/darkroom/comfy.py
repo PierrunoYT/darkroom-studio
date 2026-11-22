@@ -122,6 +122,19 @@ def is_moss(model: str) -> bool:
     return "moss_image" in model.lower()
 
 
+# Ming Image 0.1 Design, as in ComfyUI's templates (MIT): a 6B model for UI, posters and other text-heavy layouts.
+# Text-to-image runs the authors' rewriter first; the template runs it on Qwen3.8 27B, which generates about one token
+# a second on an L40S, so Darkroom runs it on MOSS-Image's Qwen3.5 9B. Edits take up to 8 images and sample with LCM.
+MING_TEXT_ENCODER = "ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors"
+MING_VAE = "ming_image_vae_bf16.safetensors"
+MING_ENHANCER_PROMPT = files("darkroom").joinpath("ming_image_pe_prompt.txt").read_text().strip()
+MING_MAX_IMAGES = 8
+
+
+def is_ming(model: str) -> bool:
+    return "ming_image" in model.lower()
+
+
 # FireRed Image Edit 1.1, as in ComfyUI's template (Apache 2.0): edit only, up to 3 images. Darkroom lists it a
 # second time with this suffix to run it with the template's 8-step Lightning LoRA.
 FIRERED_TEXT_ENCODER = "qwen_2.5_vl_7b_fp8_scaled.safetensors"
@@ -137,12 +150,12 @@ def is_firered(model: str) -> bool:
 
 def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
-    return is_flux3(model) or is_qwen_image(model) or is_firered(model)
+    return is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model)
 
 
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
-    return is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model)
+    return is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
 
 
 def _canvas(width: int, height: int) -> str:
@@ -155,7 +168,8 @@ def build_workflow(p: Params) -> dict:
     edit_images is set."""
     if p.edit_images and not can_edit(p.checkpoint):
         raise ValueError(f"{p.checkpoint} cannot edit images; use Qwen-Image 2.1 or FLUX 3 Klein")
-    expand = can_expand(p.checkpoint) and p.upsample
+    # Ming's edit template has no prompt enhancer.
+    expand = can_expand(p.checkpoint) and p.upsample and not (p.edit_images and is_ming(p.checkpoint))
     prompt = ["upsample", 0] if expand else p.prompt
     if is_flux3(p.checkpoint):
         g = {
@@ -287,6 +301,39 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
                 "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+    elif is_ming(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            # INT8 attention, as the templates set it (Nvidia and AMD GPUs).
+            "attn": {"class_type": "ModelAttentionBackend", "inputs": {
+                "model": ["unet", 0], "attention": "comfy kitchen attention"}},
+            "shift": {"class_type": "ModelSamplingFlux", "inputs": {
+                "model": ["attn", 0], "max_shift": 1.15, "base_shift": 0.5, "width": p.width, "height": p.height}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": MING_TEXT_ENCODER, "type": "qwen_image"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": MING_VAE}},
+        }
+        if p.edit_images:
+            # The sampled latent must match the first image, so it is scaled to the output size first.
+            g["resize"] = {"class_type": "ImageScale", "inputs": {
+                "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
+                "crop": "center"}}
+            g["pos"] = {"class_type": "TextEncodeMingImageEdit", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": p.prompt,
+                **{f"images.image_{i + 1}": ["resize", 0] if i == 0 else [f"ref{i}", 0]
+                   for i in range(len(p.edit_images))}}}
+        else:
+            g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["clip", 0]}}
+        if expand:
+            g["upsampler"] = {"class_type": "CLIPLoader",
+                              "inputs": {"clip_name": MOSS_TEXT_ENCODER, "type": "moss_image"}}
+            g["upsample"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["upsampler", 0], "system_prompt": MING_ENHANCER_PROMPT, "prompt": p.prompt.strip(),
+                "max_length": 4096, "thinking": False, "use_default_template": True, "mtp": "auto",
+                "sampling_mode": "on", "sampling_mode.temperature": 0.7, "sampling_mode.top_k": 64,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0.05, "sampling_mode.repetition_penalty": 1.05,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+        model, clip, vae, empty_latent = ["shift", 0], None, ["vae", 0], "EmptyLatentImage"
     elif is_firered(p.checkpoint):
         if not p.edit_images:
             raise ValueError("FireRed Image Edit only edits images")
@@ -332,6 +379,8 @@ def build_workflow(p: Params) -> dict:
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
     if is_firered(p.checkpoint) or is_ideogram(p.checkpoint):
         positive, negative = ["pos", 0], ["neg", 0]
+    elif is_ming(p.checkpoint):
+        positive, negative = ["pos", 0], None  # guided without a negative (BasicGuider)
     elif clip is None:
         positive, negative = ["text", 0], ["text", 1]
     else:
@@ -348,6 +397,9 @@ def build_workflow(p: Params) -> dict:
                 "positive": positive, "negative": negative, "vae": vae,
                 "resolution": "resize", "resolution.megapixels": 1.0, **refs}}
             positive, negative = ["refs", 0], ["refs", 1]
+            g["latent"] = {"class_type": empty_latent,
+                           "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
+        elif is_ming(p.checkpoint):
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
         elif is_firered(p.checkpoint):
@@ -390,6 +442,18 @@ def build_workflow(p: Params) -> dict:
         g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
             "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
             "sigmas": sigmas, "latent_image": ["latent", 0]}}
+    elif is_ming(p.checkpoint):
+        # The templates' sampler: no CFG; edits use LCM with slightly raised noise.
+        g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
+            "model": model, "scheduler": p.scheduler, "steps": p.steps, "denoise": denoise}}
+        g["noise"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": p.seed}}
+        g["guider"] = {"class_type": "BasicGuider", "inputs": {"model": model, "conditioning": positive}}
+        g["sampler"] = ({"class_type": "SamplerLCM", "inputs": {"s_noise": 1.02, "s_noise_end": 1.0,
+                                                                "noise_clip_std": 0.0}} if p.edit_images
+                        else {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}})
+        g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
+            "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
     elif is_qwen_turbo(p.checkpoint):
         # Fixed schedule instead of steps/scheduler; img2img keeps the low-noise tail of it.
         g["sigmas"] = {"class_type": "ManualSigmas", "inputs": {"sigmas": QWEN_TURBO_SIGMAS}}
@@ -450,12 +514,12 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
-            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u)
+            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u)
             or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
