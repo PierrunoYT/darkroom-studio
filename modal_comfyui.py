@@ -78,6 +78,11 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/Mage-Flow", "diffusion_models/mage_flow_edit_turbo_int8_convrot.safetensors"),
     ("text_encoders", "Comfy-Org/Mage-Flow", "text_encoders/qwen3vl_4b_bf16.safetensors", "mage_flow_qwen3vl_4b_bf16.safetensors"),
     ("vae", "Comfy-Org/Mage-Flow", "vae/mage_flow_vae_bf16.safetensors"),
+    # Krea 2 Turbo, fp8 as in ComfyUI's template (about 18 GB), with its Qwen3-VL 4B encoder stored under its own name;
+    # the VAE is FireRed's below. Krea 2 Community License: commercial use under $1M annual revenue.
+    ("diffusion_models", "Comfy-Org/Krea-2", "diffusion_models/krea2_turbo_fp8_scaled.safetensors"),
+    ("text_encoders", "Comfy-Org/Krea-2", "text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
+     "krea2_qwen3vl_4b_fp8_scaled.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),

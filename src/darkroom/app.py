@@ -13,7 +13,7 @@ from websocket import WebSocketException
 
 from darkroom.comfy import (FIRERED_MAX_IMAGES, LIGHTNING, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_edit_only, is_mage, is_ming, is_sd3,
+                            is_edit_only, is_krea, is_mage, is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -88,9 +88,10 @@ def presets(model: str | None):
     # slow rewrite).
     name = "FLUX 3 upsampler" if is_flux3(model) else "MOSS-Image upsampler" if is_moss(model) \
         else "Ideogram JSON captioner" if is_ideogram(model) else "Ming rewriter" if is_ming(model) \
-        else "Qwen-Image enhancer"
+        else "Krea 2 refiner" if is_krea(model) else "Qwen-Image enhancer"
     upsampler = gr.update(visible=can_expand(model),
-                          value=is_flux3(model) or is_moss(model) or is_ideogram(model) or is_ming(model),
+                          value=is_flux3(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
+                          or is_krea(model),
                           label=f"Expand prompt with the {name}")
     return (*_preset(model), upsampler)
 
@@ -100,6 +101,8 @@ def _preset(model: str):
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
     if is_mage(model):  # ComfyUI's Mage-Flow templates: Turbo must run 4 steps at CFG 1
         return (1024, 4, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 30, 5, "euler", "simple")
+    if is_krea(model):  # ComfyUI's Krea 2 Turbo template
+        return 1024, 8, 1, "euler", "simple"
     if is_ming(model):  # ComfyUI's Ming Image 0.1 Design templates (2048 is their best size, 1024 faster)
         return 1024, 12, 1, "euler", "simple"
     if is_ideogram(model):  # ComfyUI's Ideogram 4 template, Default preset (12 steps picks Turbo, 48 Quality)

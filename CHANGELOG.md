@@ -70,6 +70,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Mage-Flow (Microsoft, MIT), following ComfyUI's templates: text-to-image and edit checkpoints, each with a 4-step
   Turbo version (30 steps at CFG 5, or 4 at CFG 1). The edit checkpoints take up to 3 images. The Modal download step
   fetches them and can now store a file under a different name when two repos ship different files with the same name.
+- Krea 2 Turbo (Krea 2 Community License), following ComfyUI's template: fp8, 8 steps at CFG 1 against a zeroed
+  negative, for txt2img and img2img. The template's prompt refiner runs on Krea's own Qwen3-VL 4B encoder and is on by
+  default. The Modal download step fetches it.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

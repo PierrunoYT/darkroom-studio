@@ -150,6 +150,16 @@ def is_mage_edit(model: str) -> bool:
     return is_mage(model) and "edit" in model.lower()
 
 
+# Krea 2 Turbo, as in ComfyUI's template (Krea 2 Community License): 8 steps at CFG 1 against a zeroed negative.
+# Its own text encoder refines the prompt first (on by default), with the template's instructions in front of it.
+KREA_TEXT_ENCODER = "krea2_qwen3vl_4b_fp8_scaled.safetensors"  # stored under this name, as Mage-Flow's
+KREA_REFINER_PROMPT = files("darkroom").joinpath("krea2_pe_prompt.txt").read_text().strip()
+
+
+def is_krea(model: str) -> bool:
+    return "krea2" in model.lower()
+
+
 def is_edit_only(model: str) -> bool:
     return is_firered(model) or is_mage_edit(model)
 
@@ -174,7 +184,8 @@ def can_edit(model: str) -> bool:
 
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
-    return is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
+    return (is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
+            or is_krea(model))
 
 
 def _canvas(width: int, height: int) -> str:
@@ -392,6 +403,23 @@ def build_workflow(p: Params) -> dict:
             g[key] = {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {
                 "clip": ["clip", 0], "vae": ["vae", 0], "prompt": text, **images}}
         model, clip, vae, empty_latent = ["norm", 0], None, ["vae", 0], "EmptyLatentImage"
+    elif is_krea(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": KREA_TEXT_ENCODER, "type": "krea2"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": FIRERED_VAE}},  # the same Qwen-Image VAE
+            "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["clip", 0]}},
+            "neg": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}},
+        }
+        if expand:
+            g["upsample"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["clip", 0], "prompt": f"{KREA_REFINER_PROMPT}\n{p.prompt.strip()}",
+                "max_length": 512, "thinking": False, "use_default_template": True,
+                "sampling_mode": "on", "sampling_mode.temperature": 0.7, "sampling_mode.top_k": 64,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0.05, "sampling_mode.repetition_penalty": 1.05,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+        model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyLatentImage"
     elif is_zimage(p.checkpoint):
         g: dict = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -410,7 +438,7 @@ def build_workflow(p: Params) -> dict:
             g["shift"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": model, "shift": 3.0}}
             model, clip = ["shift", 0], ["clip", 0]
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
-    if is_firered(p.checkpoint) or is_ideogram(p.checkpoint):
+    if is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint):
         positive, negative = ["pos", 0], ["neg", 0]
     elif is_ming(p.checkpoint):
         positive, negative = ["pos", 0], None  # guided without a negative (BasicGuider)
@@ -550,13 +578,13 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

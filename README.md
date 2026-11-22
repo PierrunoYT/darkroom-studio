@@ -12,8 +12,9 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   and with [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo), which renders photoreal images and legible
   text in 8 steps, with [FLUX 3 Image Klein](https://bfl.ai/blog/flux-3-image-klein) from Black Forest Labs, and
   with [Qwen-Image 2.1](https://github.com/QwenLM/Qwen-Image), which is strong at typography and dense text, and
-  with [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) (Apache 2.0), strong at long text and layouts
-- **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers (on by default) and Qwen-Image 2.1's prompt
+  with [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) (Apache 2.0), strong at long text and layouts, and
+  with [Krea 2 Turbo](https://huggingface.co/krea/Krea-2-Turbo), an 8-step model built for aesthetic, stylized images
+- **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
 - **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein and
@@ -204,6 +205,21 @@ The text encoder is `text_encoders/qwen3vl_4b_bf16.safetensors` in that repo; it
 encoder of the same name, so save it as `mage_flow_qwen3vl_4b_bf16.safetensors`. Darkroom lists any diffusion model
 whose name contains `mage_flow` and builds the graph from ComfyUI's templates: 30 steps at CFG 5, or 4 steps at CFG 1
 for Turbo. The `edit` checkpoints only edit, with up to 3 images, and the others only generate from text.
+
+For [Krea 2 Turbo](https://huggingface.co/krea/Krea-2-Turbo) (Krea 2 Community License: commercial use only under
+$1M annual revenue), download (about 18 GB) from [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2):
+
+```
+ComfyUI/models/diffusion_models/krea2_turbo_fp8_scaled.safetensors
+ComfyUI/models/text_encoders/krea2_qwen3vl_4b_fp8_scaled.safetensors
+ComfyUI/models/vae/qwen_image_vae.safetensors
+```
+
+The text encoder is `text_encoders/qwen3vl_4b_fp8_scaled.safetensors` in that repo; save it as
+`krea2_qwen3vl_4b_fp8_scaled.safetensors` so it cannot clash with other Qwen3-VL 4B files. The VAE is the same file
+FireRed uses. Darkroom lists any diffusion model whose name contains `krea2` and builds the graph from ComfyUI's
+template: 8 steps at CFG 1. The template's prompt refiner, run on Krea's own text encoder, is on by default; it keeps
+the scene but adds a no-text clause unless you quote the words to render.
 
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),
