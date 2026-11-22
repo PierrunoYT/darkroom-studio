@@ -157,7 +157,12 @@ def describe(evt: gr.SelectData):
                 "scheduler", "denoise", "mode"):
         if key in meta:
             lines.append(f"- **{key.replace('_', ' ')}:** {meta[key]}")
-    return gr.update(value="\n".join(lines), visible=True)
+    return gr.update(value="\n".join(lines), visible=True), str(path), gr.update(visible=True)
+
+
+def send_to_edit(path: str):
+    """Load the picked contact sheet image as the image to edit and open the Edit tab."""
+    return path, gr.Tabs(selected="edit")
 
 
 def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_size,
@@ -243,47 +248,48 @@ def build_ui() -> gr.Blocks:
                     generate_btn = gr.Button("Develop", variant="primary", elem_id="generate", scale=3)
                     stop_btn = gr.Button("Stop", variant="secondary", scale=1)
 
-                with gr.Tab("Image"):
-                    ckpt = gr.Dropdown(label="Model", choices=[], interactive=True,
-                                       info="Picking a model applies its recommended settings")
-                    upsample = gr.Checkbox(label="Expand prompt with the FLUX 3 upsampler", value=True,
-                                           visible=False, info="Rewrites a short prompt into a full scene caption "
-                                           "before sampling. Turn off when yours already is one.")
-                    aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
-                    base = gr.Radio([512, 768, 1024], value=512, label="Base resolution",
-                                    info="512 for SD 1.5, 1024 for SDXL, SD 3.5, Z-Image, FLUX 3, Qwen-Image and MOSS")
-                    custom_size = gr.Checkbox(label="Custom size", value=False)
-                    with gr.Row(visible=False) as custom_row:
-                        width = gr.Slider(64, 2048, 512, step=64, label="Width")
-                        height = gr.Slider(64, 2048, 512, step=64, label="Height")
-                    batch = gr.Slider(1, 8, 1, step=1, label="Batch size")
-                with gr.Tab("Sampler"):
-                    with gr.Row():
-                        sampler = gr.Dropdown(label="Sampler", choices=[], interactive=True)
-                        scheduler = gr.Dropdown(label="Scheduler", choices=[], interactive=True)
-                    steps = gr.Slider(1, 100, 20, step=1, label="Steps")
-                    cfg = gr.Slider(1, 20, 7, step=0.5, label="CFG scale")
-                    with gr.Row():
-                        seed = gr.Number(label="Seed", value=0, precision=0, minimum=0, maximum=MAX_SEED)
-                        randomize = gr.Checkbox(label="Random seed", value=True)
-                with gr.Tab("Img2img"):
-                    init_image = gr.Image(label="Init image (optional)", type="pil", height=260)
-                    denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
-                                        info="Lower keeps more of the init image")
-                with gr.Tab("Edit"):
-                    gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein and FireRed Image Edit only. Write what to change as the prompt, "
-                                "such as *make the boat red*. The result keeps this image's shape.")
-                    edit_image = gr.Image(label="Image to edit", type="pil", height=260)
-                    edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,
-                                           columns=4, height=160, file_types=["image"],
-                                           elem_id="edit_refs")
-                    gr.Markdown("With Qwen-Image, refer to the images as `<image1>`, `<image2>`, …; with FLUX 3, "
-                                "as *the first image*, *the second image*; with FireRed, as *Picture 1*, *Picture 2*. "
-                                "Up to 10 images in total (3 with FireRed).",
-                                elem_classes="hint")
-                with gr.Tab("Connection"):
-                    url = gr.Textbox(label="ComfyUI URL", value=DEFAULT_URL)
-                    refresh_btn = gr.Button("Connect / refresh models")
+                with gr.Tabs() as tabs:
+                    with gr.Tab("Image"):
+                        ckpt = gr.Dropdown(label="Model", choices=[], interactive=True,
+                                           info="Picking a model applies its recommended settings")
+                        upsample = gr.Checkbox(label="Expand prompt with the FLUX 3 upsampler", value=True,
+                                               visible=False, info="Rewrites a short prompt into a full scene caption "
+                                               "before sampling. Turn off when yours already is one.")
+                        aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
+                        base = gr.Radio([512, 768, 1024], value=512, label="Base resolution",
+                                        info="512 for SD 1.5, 1024 for SDXL, SD 3.5, Z-Image, FLUX 3, Qwen-Image and MOSS")
+                        custom_size = gr.Checkbox(label="Custom size", value=False)
+                        with gr.Row(visible=False) as custom_row:
+                            width = gr.Slider(64, 2048, 512, step=64, label="Width")
+                            height = gr.Slider(64, 2048, 512, step=64, label="Height")
+                        batch = gr.Slider(1, 8, 1, step=1, label="Batch size")
+                    with gr.Tab("Sampler"):
+                        with gr.Row():
+                            sampler = gr.Dropdown(label="Sampler", choices=[], interactive=True)
+                            scheduler = gr.Dropdown(label="Scheduler", choices=[], interactive=True)
+                        steps = gr.Slider(1, 100, 20, step=1, label="Steps")
+                        cfg = gr.Slider(1, 20, 7, step=0.5, label="CFG scale")
+                        with gr.Row():
+                            seed = gr.Number(label="Seed", value=0, precision=0, minimum=0, maximum=MAX_SEED)
+                            randomize = gr.Checkbox(label="Random seed", value=True)
+                    with gr.Tab("Img2img"):
+                        init_image = gr.Image(label="Init image (optional)", type="pil", height=260)
+                        denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
+                                            info="Lower keeps more of the init image")
+                    with gr.Tab("Edit", id="edit"):
+                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein and FireRed Image Edit only. Write what to change as the prompt, "
+                                    "such as *make the boat red*. The result keeps this image's shape.")
+                        edit_image = gr.Image(label="Image to edit", type="pil", height=260)
+                        edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,
+                                               columns=4, height=160, file_types=["image"],
+                                               elem_id="edit_refs")
+                        gr.Markdown("With Qwen-Image, refer to the images as `<image1>`, `<image2>`, …; with FLUX 3, "
+                                    "as *the first image*, *the second image*; with FireRed, as *Picture 1*, *Picture 2*. "
+                                    "Up to 10 images in total (3 with FireRed).",
+                                    elem_classes="hint")
+                    with gr.Tab("Connection"):
+                        url = gr.Textbox(label="ComfyUI URL", value=DEFAULT_URL)
+                        refresh_btn = gr.Button("Connect / refresh models")
 
             with gr.Column(scale=6):
                 status = gr.Markdown("", elem_id="status")
@@ -293,14 +299,18 @@ def build_ui() -> gr.Blocks:
                 gallery = gr.Gallery(label=f"Contact sheet · {OUTPUT_DIR}", columns=3, height=520,
                                      object_fit="contain", show_label=True, preview=False, elem_id="contact")
                 details = gr.Markdown(visible=False, elem_id="details")
-                refresh_gallery_btn = gr.Button("Refresh contact sheet", size="sm")
+                picked = gr.State(None)  # path of the image picked in the contact sheet
+                with gr.Row():
+                    send_btn = gr.Button("Send to Edit", size="sm", visible=False)
+                    refresh_gallery_btn = gr.Button("Refresh contact sheet", size="sm")
 
         connect_outputs = [ckpt, sampler, scheduler, status]
         ckpt.change(presets, ckpt, [base, steps, cfg, sampler, scheduler, upsample])
         demo.load(connect, url, connect_outputs)
         demo.load(load_gallery, None, gallery)
         refresh_gallery_btn.click(load_gallery, None, gallery)
-        gallery.select(describe, None, details)
+        gallery.select(describe, None, [details, picked, send_btn])
+        send_btn.click(send_to_edit, picked, [edit_image, tabs])
         refresh_btn.click(connect, url, connect_outputs)
         custom_size.change(lambda c: gr.update(visible=c), custom_size, custom_row)
 

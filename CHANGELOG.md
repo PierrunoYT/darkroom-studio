@@ -56,6 +56,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - SD 3.5 Large Turbo, following Stability's ComfyUI workflow: it loads CLIP-G, CLIP-L and T5-XXL separately, uses
   shift 3, and picking it sets 4 steps, CFG 1, `dpmpp_2m`, `sgm_uniform`. The Modal download step fetches it from the
   gated repo with the `huggingface` secret.
+- Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
+  Edit tab, so edits can be chained.
 
 ### Changed
 

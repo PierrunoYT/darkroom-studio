@@ -31,7 +31,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
 
 - **Saved gallery:** every image is saved to `~/Pictures/Darkroom` (set `DARKROOM_OUTPUT_DIR` to change it) as a PNG
   with its prompt, model, seed and sampler settings embedded. The contact sheet shows that folder, newest first, so it
-  survives restarts; click an image to see its file path and settings. Images you copy into the folder appear after
+  survives restarts; click an image to see its file path and settings, and **Send to Edit** to load it in the Edit tab
+  for another edit. Images you copy into the folder appear after
   **Refresh contact sheet**.
 
 ## Quick start
