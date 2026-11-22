@@ -29,6 +29,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   prompt with reasoning on, and the Expand prompt toggle now covers both FLUX 3 and Qwen-Image.
 - The Modal download step also fetches the Qwen-Image 2.1 Turbo checkpoint and the prompt enhancer.
 
+- Images are saved to `~/Pictures/Darkroom` (or `DARKROOM_OUTPUT_DIR`) as PNGs with the generation settings
+  embedded, and the contact sheet shows that folder, newest first, across restarts. Clicking an image shows its
+  path and settings; Refresh contact sheet picks up files added by hand.
+
+### Changed
+
+- The contact sheet is backed by the output folder; the Clear contact sheet button is replaced by Refresh.
+
 ### Fixed
 
 - The contact sheet showed a gap above wide images and cut them off at the bottom; thumbnails now keep each image's

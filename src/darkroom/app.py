@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import os
 import random
+import time
+from pathlib import Path
 
 import gradio as gr
+from PIL import Image, PngImagePlugin
 from websocket import WebSocketException
 
 from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, can_expand, is_flux3, is_qwen_image, is_qwen_turbo, is_zimage
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
+# Every developed image is saved here, and the gallery shows this folder.
+OUTPUT_DIR = Path(os.environ.get("DARKROOM_OUTPUT_DIR", "~/Pictures/Darkroom")).expanduser().resolve()
+GALLERY_LIMIT = 200
+IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp"}
 ASPECTS = {
     "1:1": (1, 1), "4:3": (4, 3), "3:4": (3, 4), "3:2": (3, 2),
     "2:3": (2, 3), "16:9": (16, 9), "9:16": (9, 16),
@@ -93,8 +100,52 @@ def _preset(model: str):
     return 512, 20, 7, "euler", "normal"
 
 
+def save_images(images, meta: dict) -> None:
+    """Write images to OUTPUT_DIR as PNGs with the generation settings in their text chunks."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    info = PngImagePlugin.PngInfo()
+    for key, value in meta.items():
+        if value not in (None, ""):
+            info.add_itxt(key, str(value))
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    for i, image in enumerate(images):
+        image.save(OUTPUT_DIR / f"{stamp}-{meta['seed']}-{i}.png", pnginfo=info)
+
+
+def load_gallery():
+    """The newest images in OUTPUT_DIR, with captions from their metadata."""
+    if not OUTPUT_DIR.is_dir():
+        return []
+    files = sorted((f for f in OUTPUT_DIR.iterdir() if f.suffix.lower() in IMAGE_TYPES),
+                   key=lambda f: f.stat().st_mtime, reverse=True)[:GALLERY_LIMIT]
+    items = []
+    for f in files:
+        try:
+            with Image.open(f) as im:
+                meta = im.info
+        except OSError:
+            continue
+        caption = f"seed {meta['seed']} · {meta.get('prompt', '')[:80]}" if "seed" in meta else f.name
+        items.append((str(f), caption))
+    return items
+
+
+def describe(evt: gr.SelectData):
+    """Settings and location of the image picked in the gallery."""
+    # Gradio hands back its cached copy; file names are unique, so point at the original in OUTPUT_DIR.
+    path = OUTPUT_DIR / Path(evt.value["image"]["path"]).name
+    with Image.open(path) as im:
+        meta, size = dict(im.info), im.size
+    lines = [f"**{path.name}** · {size[0]}×{size[1]}", f"`{path}`"]
+    for key in ("model", "prompt", "expanded_prompt", "negative", "seed", "steps", "cfg", "sampler",
+                "scheduler", "denoise", "mode"):
+        if key in meta:
+            lines.append(f"- **{key.replace('_', ' ')}:** {meta[key]}")
+    return gr.update(value="\n".join(lines), visible=True)
+
+
 def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_size,
-             steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample, history):
+             steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample):
     if not ckpt:
         raise gr.Error("No model selected. Connect to ComfyUI and pick one.")
     if not prompt.strip():
@@ -115,34 +166,36 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
         if can_expand(ckpt) and upsample:
             expanded = gr.update(value="Expanding the prompt…", visible=True)
         mode = "img2img" if init_name else "txt2img"
-        yield gr.update(), gr.update(), f"⏳ Queued {mode} · {width}×{height} · seed {seed}", seed, history, expanded
+        yield gr.update(), gr.update(), f"⏳ Queued {mode} · {width}×{height} · seed {seed}", seed, expanded
         for event in client.run(build_workflow(params)):
             if event[0] == "progress":
                 _, value, total = event
                 bar = "█" * int(20 * value / total) + "░" * (20 - int(20 * value / total))
-                yield gr.update(), gr.update(), f"{bar} step {value}/{total} · seed {seed}", seed, history, gr.update()
+                yield gr.update(), gr.update(), f"{bar} step {value}/{total} · seed {seed}", seed, gr.update()
             elif event[0] == "preview":
-                yield gr.update(value=event[1], visible=True), gr.update(), gr.update(), seed, history, gr.update()
+                yield gr.update(value=event[1], visible=True), gr.update(), gr.update(), seed, gr.update()
             else:
                 images, texts = event[1], event[2]
                 if texts:
                     expanded = gr.update(value=texts[0], visible=True)
-                captions = [f"seed {seed} · {prompt[:80]}" for _ in images]
-                history = list(zip(images, captions)) + history
-                yield (gr.update(value=None, visible=False), history,
-                       f"✅ Developed {len(images)} image(s) · {width}×{height} · seed {seed}", seed, history,
-                       expanded)
+                save_images(images, {
+                    "prompt": prompt, "expanded_prompt": texts[0] if texts else None, "negative": negative,
+                    "model": ckpt, "seed": seed, "steps": steps, "cfg": cfg, "sampler": sampler,
+                    "scheduler": scheduler, "mode": mode, "denoise": denoise if init_name else None,
+                    "software": "Darkroom"})
+                yield (gr.update(value=None, visible=False), load_gallery(),
+                       f"✅ Developed {len(images)} image(s) · {width}×{height} · seed {seed} · saved to "
+                       f"`{OUTPUT_DIR}`", seed, expanded)
     except ComfyError as e:
         msg = "⏹ Stopped" if str(e) == "Interrupted" else f"🔴 {e}"
-        yield gr.update(visible=False), gr.update(), msg, seed, history, gr.update(visible=False)
+        yield gr.update(visible=False), gr.update(), msg, seed, gr.update(visible=False)
     except (OSError, WebSocketException) as e:
         msg = f"🔴 Lost connection to ComfyUI ({e}). Check the ComfyUI console; it may have run out of memory."
-        yield gr.update(visible=False), gr.update(), msg, seed, history, gr.update(visible=False)
+        yield gr.update(visible=False), gr.update(), msg, seed, gr.update(visible=False)
 
 
 def build_ui() -> gr.Blocks:
     with gr.Blocks(title="Darkroom") as demo:
-        history = gr.State([])
         gr.Markdown("# Dark<span>room</span>\nLocal image generation, developed by ComfyUI.", elem_id="title")
 
         with gr.Row(equal_height=False):
@@ -191,30 +244,33 @@ def build_ui() -> gr.Blocks:
                 expanded = gr.Textbox(label="Expanded prompt", lines=3, max_lines=8, interactive=False,
                                       visible=False)
                 preview = gr.Image(label="Developing…", visible=False, interactive=False, height=420)
-                gallery = gr.Gallery(label="Contact sheet", columns=3, height=520, object_fit="contain",
-                                     show_label=True, preview=False, elem_id="contact")
-                clear_btn = gr.Button("Clear contact sheet", size="sm")
+                gallery = gr.Gallery(label=f"Contact sheet · {OUTPUT_DIR}", columns=3, height=520,
+                                     object_fit="contain", show_label=True, preview=False, elem_id="contact")
+                details = gr.Markdown(visible=False, elem_id="details")
+                refresh_gallery_btn = gr.Button("Refresh contact sheet", size="sm")
 
         connect_outputs = [ckpt, sampler, scheduler, status]
         ckpt.change(presets, ckpt, [base, steps, cfg, sampler, scheduler, upsample])
         demo.load(connect, url, connect_outputs)
+        demo.load(load_gallery, None, gallery)
+        refresh_gallery_btn.click(load_gallery, None, gallery)
+        gallery.select(describe, None, details)
         refresh_btn.click(connect, url, connect_outputs)
         custom_size.change(lambda c: gr.update(visible=c), custom_size, custom_row)
 
         inputs = [url, ckpt, prompt, negative, aspect, base, width, height, custom_size,
-                  steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample, history]
-        outputs = [preview, gallery, status, seed, history, expanded]
+                  steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample]
+        outputs = [preview, gallery, status, seed, expanded]
         generate_btn.click(generate, inputs, outputs, concurrency_limit=1)
         prompt.submit(generate, inputs, outputs, concurrency_limit=1)
         # Interrupting ComfyUI ends the running generate() with an "Interrupted" event.
         stop_btn.click(lambda u: ComfyClient(u).interrupt(), url, None)
-        clear_btn.click(lambda: ([], []), None, [gallery, history])
     return demo
 
 
 def main() -> None:
     build_ui().queue().launch(
-        theme=THEME, css=CSS, js=FORCE_DARK,
+        theme=THEME, css=CSS, js=FORCE_DARK, allowed_paths=[str(OUTPUT_DIR)],
         server_name=os.environ.get("DARKROOM_HOST", "127.0.0.1"),
         server_port=int(os.environ.get("DARKROOM_PORT", "7860")),
     )

@@ -22,7 +22,10 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
 - **Contact sheet:** every image of the session, newest first
 - **Any backend:** ComfyUI on this machine, another GPU box, or a [Modal](https://modal.com) cloud GPU behind a token
 
-Images are also saved by ComfyUI in its `output/` folder with the `Darkroom` prefix.
+- **Saved gallery:** every image is saved to `~/Pictures/Darkroom` (set `DARKROOM_OUTPUT_DIR` to change it) as a PNG
+  with its prompt, model, seed and sampler settings embedded. The contact sheet shows that folder, newest first, so it
+  survives restarts; click an image to see its file path and settings. Images you copy into the folder appear after
+  **Refresh contact sheet**.
 
 ## Quick start
 
@@ -142,6 +145,7 @@ uv run darkroom
 | `COMFYUI_URL`   | `http://127.0.0.1:8188`  | ComfyUI server (also editable in the Connection tab)                 |
 | `COMFYUI_TOKEN` | unset                    | Bearer token for a ComfyUI behind an auth proxy, such as Modal's     |
 | `DARKROOM_HOST` | `127.0.0.1`              | Interface to listen on; use `0.0.0.0` to reach it from other devices |
+| `DARKROOM_OUTPUT_DIR` | `~/Pictures/Darkroom` | Folder where images are saved and that the contact sheet shows |
 | `DARKROOM_PORT` | `7860`                   | Port to listen on                                                    |
 | `DARKROOM_GPU`  | `L40S`                   | Modal GPU type, read by `modal deploy modal_comfyui.py`              |
 
