@@ -188,6 +188,23 @@ most of an hour; Darkroom runs it on MOSS-Image's Qwen3.5 9B text encoder (`qwen
 Put the text you want rendered in quotes. Picking it sets 1024; the templates get their best quality at 2048. It also
 edits, with up to 8 images; refer to them as *the first image*, *the second image*.
 
+For [Mage-Flow](https://github.com/microsoft/Mage), Microsoft's compact 4B model (MIT), download (about 26 GB) from
+[Comfy-Org/Mage-Flow](https://huggingface.co/Comfy-Org/Mage-Flow):
+
+```
+ComfyUI/models/diffusion_models/mage_flow_int8_convrot.safetensors              (text-to-image)
+ComfyUI/models/diffusion_models/mage_flow_turbo_int8_convrot.safetensors        (text-to-image, 4 steps)
+ComfyUI/models/diffusion_models/mage_flow_edit_int8_convrot.safetensors         (edit)
+ComfyUI/models/diffusion_models/mage_flow_edit_turbo_int8_convrot.safetensors   (edit, 4 steps)
+ComfyUI/models/text_encoders/mage_flow_qwen3vl_4b_bf16.safetensors
+ComfyUI/models/vae/mage_flow_vae_bf16.safetensors
+```
+
+The text encoder is `text_encoders/qwen3vl_4b_bf16.safetensors` in that repo; it is a different file from FLUX 3's
+encoder of the same name, so save it as `mage_flow_qwen3vl_4b_bf16.safetensors`. Darkroom lists any diffusion model
+whose name contains `mage_flow` and builds the graph from ComfyUI's templates: 30 steps at CFG 5, or 4 steps at CFG 1
+for Turbo. The `edit` checkpoints only edit, with up to 3 images, and the others only generate from text.
+
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),
 [FireRed-Image-Edit-1.0-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.0-ComfyUI) and

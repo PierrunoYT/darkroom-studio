@@ -67,6 +67,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Ming Image 0.1 Design (MIT), following ComfyUI's templates: the Ling text encoder, INT8 attention, Flux-style shift
   and 12 steps without CFG. Text-to-image runs the authors' layout rewriter first (on by default), on the Qwen3.5 9B encoder because the template's Qwen3.8 27B is too slow;
   edits take up to 8 images and sample with LCM. The Modal download step fetches it.
+- Mage-Flow (Microsoft, MIT), following ComfyUI's templates: text-to-image and edit checkpoints, each with a 4-step
+  Turbo version (30 steps at CFG 5, or 4 at CFG 1). The edit checkpoints take up to 3 images. The Modal download step
+  fetches them and can now store a file under a different name when two repos ship different files with the same name.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

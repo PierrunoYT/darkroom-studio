@@ -135,6 +135,25 @@ def is_ming(model: str) -> bool:
     return "ming_image" in model.lower()
 
 
+# Mage-Flow (Microsoft, MIT), as in ComfyUI's templates. Text-to-image and edit are separate checkpoints, each with a
+# 4-step Turbo version; one node encodes the prompt, negative and up to 3 reference images and makes the latent.
+MAGE_TEXT_ENCODER = "mage_flow_qwen3vl_4b_bf16.safetensors"  # stored under this name; FLUX 3's file of the same name differs
+MAGE_VAE = "mage_flow_vae_bf16.safetensors"
+MAGE_MAX_IMAGES = 3
+
+
+def is_mage(model: str) -> bool:
+    return "mage_flow" in model.lower()
+
+
+def is_mage_edit(model: str) -> bool:
+    return is_mage(model) and "edit" in model.lower()
+
+
+def is_edit_only(model: str) -> bool:
+    return is_firered(model) or is_mage_edit(model)
+
+
 # FireRed Image Edit 1.1, as in ComfyUI's template (Apache 2.0): edit only, up to 3 images. Darkroom lists it a
 # second time with this suffix to run it with the template's 8-step Lightning LoRA.
 FIRERED_TEXT_ENCODER = "qwen_2.5_vl_7b_fp8_scaled.safetensors"
@@ -150,7 +169,7 @@ def is_firered(model: str) -> bool:
 
 def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
-    return is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model)
+    return is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
 
 
 def can_expand(model: str) -> bool:
@@ -301,6 +320,20 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
                 "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+    elif is_mage(p.checkpoint):
+        if is_mage_edit(p.checkpoint) != bool(p.edit_images):
+            raise ValueError("Mage-Flow-Edit only edits, and the text-to-image Mage-Flow checkpoints don't")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": MAGE_TEXT_ENCODER, "type": "mage"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": MAGE_VAE}},
+            # Outputs positive, negative and the empty latent; references are resized to the output size.
+            "text": {"class_type": "TextEncodeMageFlowEdit", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": prompt, "negative_prompt": p.negative,
+                "width": p.width, "height": p.height, "batch_size": 1,
+                **{f"images.image_{i + 1}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}},
+        }
+        model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], None
     elif is_ming(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -419,6 +452,9 @@ def build_workflow(p: Params) -> dict:
         g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["scale", 0], "vae": vae}}
         g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["encode", 0], "amount": p.batch}}
         denoise = p.denoise
+    elif is_mage(p.checkpoint):
+        g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["text", 2], "amount": p.batch}}
+        denoise = 1.0
     else:
         g["latent"] = {
             "class_type": empty_latent,
@@ -514,12 +550,12 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
-            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u)
+            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
             or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:

@@ -18,7 +18,7 @@ PORT = 8000
 
 FLUX3 = "black-forest-labs/flux-3-image-klein-comfy"
 
-# (ComfyUI model folder, Hugging Face repo, file in the repo)
+# (ComfyUI model folder, Hugging Face repo, file in the repo[, local file name when it would clash])
 MODELS = [
     ("checkpoints", "Comfy-Org/stable-diffusion-v1-5-archive", "v1-5-pruned-emaonly-fp16.safetensors"),
     ("checkpoints", "stabilityai/stable-diffusion-xl-base-1.0", "sd_xl_base_1.0.safetensors"),
@@ -70,6 +70,14 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/Ming-Image", "diffusion_models/ming_image_0.1_design_int8_convrot.safetensors"),
     ("text_encoders", "Comfy-Org/Ming-Image", "text_encoders/ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors"),
     ("vae", "Comfy-Org/Ming-Image", "vae/ming_image_vae_bf16.safetensors"),
+    # Mage-Flow (Microsoft, MIT), int8 as in ComfyUI's templates: text-to-image and edit, base and Turbo (about 26 GB).
+    # Its Qwen3-VL 4B encoder differs from FLUX 3's file of the same name, so it is stored under its own name.
+    ("diffusion_models", "Comfy-Org/Mage-Flow", "diffusion_models/mage_flow_int8_convrot.safetensors"),
+    ("diffusion_models", "Comfy-Org/Mage-Flow", "diffusion_models/mage_flow_turbo_int8_convrot.safetensors"),
+    ("diffusion_models", "Comfy-Org/Mage-Flow", "diffusion_models/mage_flow_edit_int8_convrot.safetensors"),
+    ("diffusion_models", "Comfy-Org/Mage-Flow", "diffusion_models/mage_flow_edit_turbo_int8_convrot.safetensors"),
+    ("text_encoders", "Comfy-Org/Mage-Flow", "text_encoders/qwen3vl_4b_bf16.safetensors", "mage_flow_qwen3vl_4b_bf16.safetensors"),
+    ("vae", "Comfy-Org/Mage-Flow", "vae/mage_flow_vae_bf16.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
@@ -78,7 +86,7 @@ MODELS = [
     ("text_encoders", "Comfy-Org/HunyuanVideo_1.5_repackaged",
      "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"),
 ]
-FOLDERS = sorted({folder for folder, _, _ in MODELS})
+FOLDERS = sorted({folder for folder, *_ in MODELS})
 
 # Models live in a Volume; ComfyUI finds them through extra_model_paths.yaml (printf expands \n).
 EXTRA_PATHS = r"darkroom:\n  base_path: /models\n" + "".join(rf"  {f}: {f}\n" for f in FOLDERS)
@@ -104,8 +112,8 @@ def download(extra: str = ""):
     for item in filter(None, extra.split(",")):
         repo, _, filename = item.rpartition("/")
         wanted.append(("checkpoints", repo, filename))
-    for folder, repo, filename in wanted:
-        dest = f"/models/{folder}/{os.path.basename(filename)}"
+    for folder, repo, filename, *name in wanted:
+        dest = f"/models/{folder}/{name[0] if name else os.path.basename(filename)}"
         if os.path.exists(dest):
             print(f"have {dest}")
             continue
