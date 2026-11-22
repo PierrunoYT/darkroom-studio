@@ -8,7 +8,7 @@ import random
 import gradio as gr
 from websocket import WebSocketException
 
-from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, is_flux3, is_zimage
+from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, is_flux3, is_qwen_image, is_zimage
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
@@ -75,6 +75,8 @@ def presets(model: str | None):
 def _preset(model: str):
     if is_flux3(model):  # Black Forest Labs' FLUX 3 Klein workflows
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
+    if is_qwen_image(model):  # ComfyUI's Qwen-Image 2.1 template
+        return 1024, 25, 1, "euler", "simple"
     if is_zimage(model):  # ComfyUI's Z-Image Turbo template
         return 1024, 8, 1, "res_multistep", "simple"
     if "xl" in model.lower():
@@ -152,7 +154,7 @@ def build_ui() -> gr.Blocks:
                                            "Turn off only when your prompt already is one.")
                     aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
                     base = gr.Radio([512, 768, 1024], value=512, label="Base resolution",
-                                    info="512 for SD 1.5, 1024 for SDXL, Z-Image and FLUX 3")
+                                    info="512 for SD 1.5, 1024 for SDXL, Z-Image, FLUX 3 and Qwen-Image")
                     custom_size = gr.Checkbox(label="Custom size", value=False)
                     with gr.Row(visible=False) as custom_row:
                         width = gr.Slider(64, 2048, 512, step=64, label="Width")

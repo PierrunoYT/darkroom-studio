@@ -19,6 +19,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - FLUX 3 prompt upsampler, on by default: the Qwen3.5 9B upsampler expands the prompt into a full scene caption
   for the canvas shape, and an Expanded prompt box shows the result.
 - The Modal download step fetches FLUX 3 Klein from its gated repo using the `huggingface` Modal secret.
+- Qwen-Image 2.1 support, following ComfyUI's official template: the model list includes `qwen_image` diffusion
+  models, which load with the Qwen3-VL 8B text encoder, the Qwen-Image 2.1 VAE and the Qwen Image 2.1 cache, with
+  prompts encoded by the Text Encode Qwen Image 2.1 node. Preset: 1024, 25 steps, CFG 1, `euler`, `simple`.
+- The Modal download step also fetches Qwen-Image 2.1 (base, bf16).
 
 ### Changed
 

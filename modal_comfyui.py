@@ -32,6 +32,10 @@ MODELS = [
     ("text_encoders", FLUX3, "text_encoders/qwen3vl_4b_bf16.safetensors"),
     ("text_encoders", FLUX3, "text_encoders/qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors"),
     ("vae", FLUX3, "vae/flux2-vae.safetensors"),
+    # Qwen-Image 2.1 base, bf16 (about 32 GB). Qwen Research License: non-commercial use only.
+    ("diffusion_models", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_bf16.safetensors"),
+    ("text_encoders", "Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_bf16.safetensors"),
+    ("vae", "Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors"),
 ]
 FOLDERS = sorted({folder for folder, _, _ in MODELS})
 

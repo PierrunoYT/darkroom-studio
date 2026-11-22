@@ -9,7 +9,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
 
 - **txt2img and img2img** with any checkpoint ComfyUI can load (SD 1.5, SDXL, and other single-file checkpoints)
   and with [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo), which renders photoreal images and legible
-  text in 8 steps, and with [FLUX 3 Image Klein](https://bfl.ai/blog/flux-3-image-klein) from Black Forest Labs
+  text in 8 steps, with [FLUX 3 Image Klein](https://bfl.ai/blog/flux-3-image-klein) from Black Forest Labs, and
+  with [Qwen-Image 2.1](https://github.com/QwenLM/Qwen-Image), which is strong at typography and dense text
 - **FLUX 3 prompt upsampler:** Klein's own Qwen3.5 9B upsampler turns a short prompt into the full scene caption the
   model expects, and Darkroom shows the expanded prompt
 - **Model presets:** picking a model sets its recommended resolution, steps, CFG, sampler and scheduler
@@ -77,6 +78,19 @@ ComfyUI/models/vae/flux2-vae.safetensors
 Darkroom lists any diffusion model whose name contains `flux3` and builds the graph from Black Forest Labs' ComfyUI
 workflows. It needs ComfyUI 0.41 or later and, at bf16, a GPU with more than 24 GB of VRAM. The base checkpoint
 (`flux3-image-klein-base-bf16.safetensors`) also works; picking it sets 50 steps and CFG 3.5.
+
+For Qwen-Image 2.1, download from [Comfy-Org/Qwen-Image-2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1)
+(about 32 GB):
+
+```
+ComfyUI/models/diffusion_models/qwen_image_2.1_bf16.safetensors
+ComfyUI/models/text_encoders/qwen3vl_8b_bf16.safetensors
+ComfyUI/models/vae/qwen_image_2.1_vae_bf16.safetensors
+```
+
+Darkroom lists any diffusion model whose name contains `qwen_image` and builds the graph from ComfyUI's official
+Qwen-Image 2.1 template (25 steps, CFG 1). Only the base checkpoint is supported; the Turbo checkpoint needs its own
+sampling schedule. Qwen-Image 2.1 is under the Qwen Research License, which allows **non-commercial use only**.
 Apple Silicon works through PyTorch's MPS backend with the default torch install.
 Without a GPU, install the CPU build of torch and start ComfyUI with `--cpu`. That works but is slow: a 512×512
 SD 1.5 image takes several minutes, and the model needs about 6 GB of free RAM.
@@ -90,7 +104,7 @@ generating.
 ```sh
 uv sync --extra modal
 uv run modal setup                                           # once: sign in to Modal
-uv run modal run modal_comfyui.py::download                  # SD 1.5, SDXL, Z-Image Turbo, FLUX 3 Klein into a Volume
+uv run modal run modal_comfyui.py::download                  # SD 1.5, SDXL, Z-Image, FLUX 3, Qwen-Image into a Volume
 uv run modal deploy modal_comfyui.py                         # prints https://<workspace>--darkroom-comfyui-comfyui.<region>.modal.run
 uv run modal workspace proxy-tokens create --name darkroom   # prints a token ID (wk-…) and secret (ws-…), shown only once
 
@@ -123,7 +137,7 @@ uv run darkroom
 
 - Use base resolution 512 for SD 1.5 and 1024 for SDXL and Z-Image; other sizes give duplicated subjects or blurry
   results. Picking a model sets this for you.
-- Z-Image Turbo and the distilled FLUX 3 Klein run at CFG 1, where the negative prompt has no effect. Describe what
+- Z-Image Turbo, the distilled FLUX 3 Klein and Qwen-Image 2.1 run at CFG 1, where the negative prompt has no effect. Describe what
   you want in the prompt instead.
 - With FLUX 3, keep the upsampler on for short prompts. Turn it off only when you write a full scene caption yourself;
   the **Expanded prompt** box shows what a good one looks like.
@@ -138,6 +152,7 @@ uv run darkroom
 |---|---|
 | 🔴 Cannot reach ComfyUI | ComfyUI isn't running at `COMFYUI_URL`, or the URL is wrong. |
 | 0 models | No models in `ComfyUI/models/checkpoints` (or `diffusion_models` for Z-Image). Add one and click **Connect / refresh models**. |
+| Qwen-Image: value not in list | The text encoder `qwen3vl_8b_bf16.safetensors` or VAE `qwen_image_2.1_vae_bf16.safetensors` is missing. |
 | FLUX 3: value not in list | A FLUX 3 text encoder, upsampler or VAE is missing. See the FLUX 3 files above. |
 | Z-Image: value not in list | The text encoder `qwen_3_4b.safetensors` or VAE `ae.safetensors` is missing. See the Z-Image files above. |
 | 🔴 Lost connection to ComfyUI | ComfyUI stopped mid-job, usually because it ran out of memory. Check its console; try a smaller size or batch. |

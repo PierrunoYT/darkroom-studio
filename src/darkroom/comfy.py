@@ -55,6 +55,15 @@ def is_flux3(model: str) -> bool:
     return "flux3" in model.lower()
 
 
+# Qwen-Image 2.1 base, as in ComfyUI's official text-to-image template (Qwen Research License: non-commercial).
+QWEN_TEXT_ENCODER = "qwen3vl_8b_bf16.safetensors"
+QWEN_VAE = "qwen_image_2.1_vae_bf16.safetensors"
+
+
+def is_qwen_image(model: str) -> bool:
+    return "qwen_image" in model.lower()
+
+
 def _canvas(width: int, height: int) -> str:
     g = math.gcd(width, height)
     return f"{width // g}:{height // g}"
@@ -85,6 +94,19 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
                 "sampling_mode.presence_penalty": 1.5, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+    elif is_qwen_image(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            # Keeps the text prefix in memory between steps, as the template does.
+            "cache": {"class_type": "QwenImage21Cache", "inputs": {"model": ["unet", 0], "device": "auto",
+                                                                   "dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": QWEN_TEXT_ENCODER, "type": "qwen_image"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": QWEN_VAE}},
+            # Encodes positive and negative prompts in one node.
+            "text": {"class_type": "TextEncodeQwenImage21", "inputs": {
+                "clip": ["clip", 0], "prompt": prompt, "negative_prompt": p.negative, "resolution": 1024}},
+        }
+        model, clip, vae, empty_latent = ["cache", 0], None, ["vae", 0], "EmptyLatentImage"
     elif is_zimage(p.checkpoint):
         g: dict = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -97,8 +119,12 @@ def build_workflow(p: Params) -> dict:
         g = {"ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": p.checkpoint}}}
         model, clip, vae, empty_latent = ["ckpt", 0], ["ckpt", 1], ["ckpt", 2], "EmptyLatentImage"
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
-    g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip}}
-    g["neg"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": clip}}
+    if clip is None:
+        positive, negative = ["text", 0], ["text", 1]
+    else:
+        g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip}}
+        g["neg"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": clip}}
+        positive, negative = ["pos", 0], ["neg", 0]
     if p.init_image:
         g["load"] = {"class_type": "LoadImage", "inputs": {"image": p.init_image}}
         g["scale"] = {
@@ -118,7 +144,7 @@ def build_workflow(p: Params) -> dict:
     g["sample"] = {
         "class_type": "KSampler",
         "inputs": {
-            "model": model, "positive": ["pos", 0], "negative": ["neg", 0],
+            "model": model, "positive": positive, "negative": negative,
             "latent_image": ["latent", 0], "seed": p.seed, "steps": p.steps, "cfg": p.cfg,
             "sampler_name": p.sampler, "scheduler": p.scheduler, "denoise": denoise,
         },
@@ -159,10 +185,10 @@ class ComfyClient:
         return info[1].get("options", [])
 
     def checkpoints(self) -> list[str]:
-        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3)."""
+        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image)."""
         unets = self._choices("UNETLoader", "unet_name")
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
-            u for u in unets if is_zimage(u) or is_flux3(u)]
+            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u)]
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")
