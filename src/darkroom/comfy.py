@@ -31,7 +31,7 @@ class Params:
     batch: int
     denoise: float = 1.0
     init_image: str | None = None  # name returned by ComfyClient.upload
-    upsample: bool = True  # FLUX 3 Klein only: expand the prompt with BFL's upsampler first
+    upsample: bool = True  # FLUX 3 and Qwen-Image: expand the prompt with the model's upsampler first
 
 
 # Z-Image ships as separate diffusion model, text encoder and VAE files (ComfyUI's official template).
@@ -58,10 +58,23 @@ def is_flux3(model: str) -> bool:
 # Qwen-Image 2.1 base, as in ComfyUI's official text-to-image template (Qwen Research License: non-commercial).
 QWEN_TEXT_ENCODER = "qwen3vl_8b_bf16.safetensors"
 QWEN_VAE = "qwen_image_2.1_vae_bf16.safetensors"
+QWEN_ENHANCER = "qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors"
+QWEN_ENHANCER_PROMPT = files("darkroom").joinpath("qwen_image_pe_prompt.txt").read_text().strip()
+# The Turbo checkpoint is distilled for this fixed 8-step schedule (ComfyUI's Turbo template).
+QWEN_TURBO_SIGMAS = "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
 
 
 def is_qwen_image(model: str) -> bool:
     return "qwen_image" in model.lower()
+
+
+def is_qwen_turbo(model: str) -> bool:
+    return is_qwen_image(model) and "turbo" in model.lower()
+
+
+def can_expand(model: str) -> bool:
+    """Models with a prompt upsampler or enhancer Darkroom can run."""
+    return is_flux3(model) or is_qwen_image(model)
 
 
 def _canvas(width: int, height: int) -> str:
@@ -71,7 +84,7 @@ def _canvas(width: int, height: int) -> str:
 
 def build_workflow(p: Params) -> dict:
     """Build a ComfyUI API-format graph for txt2img, or img2img when init_image is set."""
-    prompt = ["upsample", 0] if is_flux3(p.checkpoint) and p.upsample else p.prompt
+    prompt = ["upsample", 0] if can_expand(p.checkpoint) and p.upsample else p.prompt
     if is_flux3(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -107,6 +120,18 @@ def build_workflow(p: Params) -> dict:
                 "clip": ["clip", 0], "prompt": prompt, "negative_prompt": p.negative, "resolution": 1024}},
         }
         model, clip, vae, empty_latent = ["cache", 0], None, ["vae", 0], "EmptyLatentImage"
+        if p.upsample:
+            # Qwen's prompt enhancer rewrites the request; it is trained to reason first, so thinking stays on
+            # with the token budget from its model card (a smaller one can end mid-reasoning and return nothing).
+            g["upsampler"] = {"class_type": "CLIPLoader",
+                              "inputs": {"clip_name": QWEN_ENHANCER, "type": "stable_diffusion"}}
+            g["upsample"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["upsampler", 0], "system_prompt": QWEN_ENHANCER_PROMPT, "prompt": p.prompt.strip(),
+                "max_length": 16256, "thinking": True, "use_default_template": True, "mtp": "auto",
+                "sampling_mode": "on", "sampling_mode.temperature": 1, "sampling_mode.top_k": 20,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
+                "sampling_mode.presence_penalty": 1.5, "sampling_mode.seed": p.seed}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
     elif is_zimage(p.checkpoint):
         g: dict = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -141,14 +166,29 @@ def build_workflow(p: Params) -> dict:
             "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch},
         }
         denoise = 1.0
-    g["sample"] = {
-        "class_type": "KSampler",
-        "inputs": {
-            "model": model, "positive": positive, "negative": negative,
-            "latent_image": ["latent", 0], "seed": p.seed, "steps": p.steps, "cfg": p.cfg,
-            "sampler_name": p.sampler, "scheduler": p.scheduler, "denoise": denoise,
-        },
-    }
+    if is_qwen_turbo(p.checkpoint):
+        # Fixed schedule instead of steps/scheduler; img2img keeps the low-noise tail of it.
+        g["sigmas"] = {"class_type": "ManualSigmas", "inputs": {"sigmas": QWEN_TURBO_SIGMAS}}
+        sigmas = ["sigmas", 0]
+        if denoise < 1:
+            g["split"] = {"class_type": "SplitSigmasDenoise", "inputs": {"sigmas": sigmas, "denoise": denoise}}
+            sigmas = ["split", 1]
+        g["noise"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": p.seed}}
+        g["guider"] = {"class_type": "CFGGuider", "inputs": {
+            "model": model, "positive": positive, "negative": negative, "cfg": p.cfg}}
+        g["sampler"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}}
+        g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
+            "sigmas": sigmas, "latent_image": ["latent", 0]}}
+    else:
+        g["sample"] = {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": model, "positive": positive, "negative": negative,
+                "latent_image": ["latent", 0], "seed": p.seed, "steps": p.steps, "cfg": p.cfg,
+                "sampler_name": p.sampler, "scheduler": p.scheduler, "denoise": denoise,
+            },
+        }
     g["decode"] = {"class_type": "VAEDecode", "inputs": {"samples": ["sample", 0], "vae": vae}}
     g["save"] = {"class_type": "SaveImage", "inputs": {"images": ["decode", 0], "filename_prefix": "Darkroom"}}
     return g

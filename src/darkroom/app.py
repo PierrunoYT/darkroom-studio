@@ -8,7 +8,7 @@ import random
 import gradio as gr
 from websocket import WebSocketException
 
-from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, is_flux3, is_qwen_image, is_zimage
+from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, can_expand, is_flux3, is_qwen_image, is_qwen_turbo, is_zimage
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
@@ -25,6 +25,10 @@ CSS = """
 #generate { background: #b3261e; border: none; color: white; }
 #generate:hover { background: #e5483b; }
 #status { min-height: 1.5rem; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+/* Gradio forces square thumbnails, so a wide image sat mid-square with a gap above and was cut off below. */
+#contact .grid-container { grid-auto-rows: auto; align-items: start; }
+#contact .thumbnail-item { aspect-ratio: auto; height: auto; }
+#contact .thumbnail-item img { height: auto; max-height: 480px; }
 """
 
 THEME = gr.themes.Base(
@@ -68,13 +72,18 @@ def presets(model: str | None):
     """Recommended base resolution, steps, CFG, sampler, scheduler, and upsampler visibility for a model."""
     if not model:
         return (gr.update(),) * 6
-    upsampler = gr.update(visible=is_flux3(model))
+    # On by default for FLUX 3 (BFL's workflows), off for Qwen-Image (ComfyUI's template; it adds a slow rewrite).
+    upsampler = gr.update(visible=can_expand(model), value=is_flux3(model),
+                          label="Expand prompt with the FLUX 3 upsampler" if is_flux3(model)
+                          else "Expand prompt with the Qwen-Image enhancer")
     return (*_preset(model), upsampler)
 
 
 def _preset(model: str):
     if is_flux3(model):  # Black Forest Labs' FLUX 3 Klein workflows
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
+    if is_qwen_turbo(model):  # fixed 8-step schedule; steps and scheduler are ignored
+        return 1024, 8, 1, "euler", "simple"
     if is_qwen_image(model):  # ComfyUI's Qwen-Image 2.1 template
         return 1024, 25, 1, "euler", "simple"
     if is_zimage(model):  # ComfyUI's Z-Image Turbo template
@@ -103,7 +112,7 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
             batch=int(batch), denoise=float(denoise), init_image=init_name, upsample=bool(upsample),
         )
         expanded = gr.update(visible=False)
-        if is_flux3(ckpt) and upsample:
+        if can_expand(ckpt) and upsample:
             expanded = gr.update(value="Expanding the prompt…", visible=True)
         mode = "img2img" if init_name else "txt2img"
         yield gr.update(), gr.update(), f"⏳ Queued {mode} · {width}×{height} · seed {seed}", seed, history, expanded
@@ -120,7 +129,7 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
                     expanded = gr.update(value=texts[0], visible=True)
                 captions = [f"seed {seed} · {prompt[:80]}" for _ in images]
                 history = list(zip(images, captions)) + history
-                yield (gr.update(value=None, visible=False), [img for img, _ in history],
+                yield (gr.update(value=None, visible=False), history,
                        f"✅ Developed {len(images)} image(s) · {width}×{height} · seed {seed}", seed, history,
                        expanded)
     except ComfyError as e:
@@ -150,8 +159,8 @@ def build_ui() -> gr.Blocks:
                     ckpt = gr.Dropdown(label="Model", choices=[], interactive=True,
                                        info="Picking a model applies its recommended settings")
                     upsample = gr.Checkbox(label="Expand prompt with the FLUX 3 upsampler", value=True,
-                                           visible=False, info="Klein expects full scene captions. "
-                                           "Turn off only when your prompt already is one.")
+                                           visible=False, info="Rewrites a short prompt into a full scene caption "
+                                           "before sampling. Turn off when yours already is one.")
                     aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
                     base = gr.Radio([512, 768, 1024], value=512, label="Base resolution",
                                     info="512 for SD 1.5, 1024 for SDXL, Z-Image, FLUX 3 and Qwen-Image")
@@ -183,7 +192,7 @@ def build_ui() -> gr.Blocks:
                                       visible=False)
                 preview = gr.Image(label="Developing…", visible=False, interactive=False, height=420)
                 gallery = gr.Gallery(label="Contact sheet", columns=3, height=520, object_fit="contain",
-                                     show_label=True, preview=False)
+                                     show_label=True, preview=False, elem_id="contact")
                 clear_btn = gr.Button("Clear contact sheet", size="sm")
 
         connect_outputs = [ckpt, sampler, scheduler, status]

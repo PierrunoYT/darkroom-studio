@@ -36,6 +36,10 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_bf16.safetensors"),
     ("vae", "Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors"),
+    # Qwen-Image 2.1 Turbo (8 steps) and the prompt enhancer (about 24 GB)
+    ("diffusion_models", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_turbo_bf16.safetensors"),
+    ("text_encoders", "Comfy-Org/Qwen-Image-2.1",
+     "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors"),
 ]
 FOLDERS = sorted({folder for folder, _, _ in MODELS})
 

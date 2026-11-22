@@ -23,6 +23,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   models, which load with the Qwen3-VL 8B text encoder, the Qwen-Image 2.1 VAE and the Qwen Image 2.1 cache, with
   prompts encoded by the Text Encode Qwen Image 2.1 node. Preset: 1024, 25 steps, CFG 1, `euler`, `simple`.
 - The Modal download step also fetches Qwen-Image 2.1 (base, bf16).
+- Qwen-Image 2.1 Turbo: the distilled checkpoint samples on its fixed 8-step schedule (ManualSigmas with
+  SamplerCustomAdvanced), and img2img runs the low-noise part of that schedule.
+- Qwen-Image 2.1 prompt enhancer, off by default as in ComfyUI's template: the Qwen3.5 9B enhancer rewrites the
+  prompt with reasoning on, and the Expand prompt toggle now covers both FLUX 3 and Qwen-Image.
+- The Modal download step also fetches the Qwen-Image 2.1 Turbo checkpoint and the prompt enhancer.
+
+### Fixed
+
+- The contact sheet showed a gap above wide images and cut them off at the bottom; thumbnails now keep each image's
+  aspect ratio.
+- The contact sheet now shows each image's seed and prompt as a caption.
 
 ### Changed
 
