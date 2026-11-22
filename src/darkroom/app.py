@@ -11,7 +11,8 @@ import gradio as gr
 from PIL import Image, PngImagePlugin
 from websocket import WebSocketException
 
-from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, can_edit, can_expand, is_flux3, is_moss, is_qwen_image, is_qwen_turbo, is_zimage
+from darkroom.comfy import (FIRERED_MAX_IMAGES, LIGHTNING, ComfyClient, ComfyError, Params, build_workflow, can_edit,
+                            can_expand, is_firered, is_flux3, is_moss, is_qwen_image, is_qwen_turbo, is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
@@ -93,6 +94,8 @@ def presets(model: str | None):
 def _preset(model: str):
     if is_flux3(model):  # Black Forest Labs' FLUX 3 Klein workflows
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
+    if is_firered(model):  # ComfyUI's FireRed Image Edit 1.1 template, with and without the Lightning LoRA
+        return (1024, 8, 1, "euler", "simple") if model.endswith(LIGHTNING) else (1024, 40, 4, "euler", "simple")
     if is_moss(model):  # ComfyUI's MOSS-Image templates
         return 1024, 25, 2.5, "er_sde", "simple"
     if is_qwen_turbo(model):  # fixed 8-step schedule; steps and scheduler are ignored
@@ -159,13 +162,17 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
     if not prompt.strip():
         raise gr.Error("Write a prompt first.")
     edit_refs = [ref[0] if isinstance(ref, tuple) else ref for ref in (edit_refs or [])]
+    if edit_image is None and is_firered(ckpt):
+        raise gr.Error("FireRed Image Edit only edits: drop an image in the Edit tab.")
     if edit_image is not None:
         if not can_edit(ckpt):
-            raise gr.Error("Editing needs Qwen-Image 2.1 or FLUX 3 Klein. Pick one of them, or clear the Edit tab.")
+            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein or FireRed Image Edit. Pick one of them, or "
+                           "clear the Edit tab.")
         if init_image is not None:
             raise gr.Error("Use either the Img2img tab or the Edit tab, not both.")
-        if 1 + len(edit_refs) > 10:
-            raise gr.Error("Editing takes up to 10 images in total.")
+        limit = FIRERED_MAX_IMAGES if is_firered(ckpt) else 10
+        if 1 + len(edit_refs) > limit:
+            raise gr.Error(f"This model edits with up to {limit} images in total.")
         # The result keeps the edited image's shape, at about base x base pixels.
         a, b = edit_image.size
         scale = (int(base) ** 2 / (a * b)) ** 0.5
@@ -206,7 +213,7 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
                     "scheduler": scheduler, "mode": mode, "denoise": denoise if init_name else None,
                     "software": "Darkroom"})
                 yield (gr.update(value=None, visible=False), load_gallery(),
-                       f"✅ Developed {len(images)} image(s) · {width}×{height} · seed {seed} · saved to "
+                       f"✅ Developed {len(images)} image(s) · {images[0].width}×{images[0].height} · seed {seed} · saved to "
                        f"`{OUTPUT_DIR}`", seed, expanded)
     except ComfyError as e:
         msg = "⏹ Stopped" if str(e) == "Interrupted" else f"🔴 {e}"
@@ -258,14 +265,15 @@ def build_ui() -> gr.Blocks:
                     denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
                                         info="Lower keeps more of the init image")
                 with gr.Tab("Edit"):
-                    gr.Markdown("Qwen-Image 2.1 and FLUX 3 Klein only. Write what to change as the prompt, "
+                    gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein and FireRed Image Edit only. Write what to change as the prompt, "
                                 "such as *make the boat red*. The result keeps this image's shape.")
                     edit_image = gr.Image(label="Image to edit", type="pil", height=260)
                     edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,
                                            columns=4, height=160, file_types=["image"],
                                            elem_id="edit_refs")
                     gr.Markdown("With Qwen-Image, refer to the images as `<image1>`, `<image2>`, …; with FLUX 3, "
-                                "as *the first image*, *the second image*. Up to 10 images in total.",
+                                "as *the first image*, *the second image*; with FireRed, as *Picture 1*, *Picture 2*. "
+                                "Up to 10 images in total (3 with FireRed).",
                                 elem_classes="hint")
                 with gr.Tab("Connection"):
                     url = gr.Textbox(label="ComfyUI URL", value=DEFAULT_URL)

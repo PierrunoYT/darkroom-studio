@@ -15,8 +15,10 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
-- **Instruction editing** with Qwen-Image 2.1 and FLUX 3 Klein: drop an image in the **Edit** tab and describe the
-  change, such as *make it night time with rain*, optionally with up to 9 more reference images
+- **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein and
+  [FireRed Image Edit 1.1](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1) (Apache 2.0, edit only): drop an
+  image in the **Edit** tab and describe the change, such as *make it night time with rain*, optionally with more
+  reference images
 - **Model presets:** picking a model sets its recommended resolution, steps, CFG, sampler and scheduler
 - **Live development:** a step-by-step progress bar and latent previews while the image renders
 - **Aspect ratio sizing:** pick 1:1 to 16:9 and a base resolution (512, 768, 1024); Darkroom picks the
@@ -129,6 +131,23 @@ Darkroom lists any diffusion model whose name contains `moss_image` and builds t
 MOSS-Image templates: 25 steps, CFG 2.5, `er_sde`, `simple`, and skip-layer guidance for the Base checkpoint. The
 text encoder doubles as the prompt upsampler, so expanding the prompt needs no extra download. MOSS-Image is under
 Apache 2.0.
+
+For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
+[FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),
+[FireRed-Image-Edit-1.0-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.0-ComfyUI) and
+[HunyuanVideo_1.5_repackaged](https://huggingface.co/Comfy-Org/HunyuanVideo_1.5_repackaged/tree/main/split_files/text_encoders):
+
+```
+ComfyUI/models/diffusion_models/FireRed-Image-Edit-1.1-transformer.safetensors
+ComfyUI/models/loras/FireRed-Image-Edit-1.0-Lightning-8steps-v1.0.safetensors      (optional)
+ComfyUI/models/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors
+ComfyUI/models/vae/qwen_image_vae.safetensors
+```
+
+Darkroom lists any diffusion model whose name contains `firered` and builds the graph from ComfyUI's official
+template: 40 steps at CFG 4, or 8 steps at CFG 1 when you pick the **+ Lightning** entry, which Darkroom adds when
+the Lightning LoRA is installed. FireRed is under Apache 2.0.
+
 Apple Silicon works through PyTorch's MPS backend with the default torch install.
 Without a GPU, install the CPU build of torch and start ComfyUI with `--cpu`. That works but is slow: a 512×512
 SD 1.5 image takes several minutes, and the model needs about 6 GB of free RAM.
@@ -189,10 +208,11 @@ uv run darkroom
 - Press Enter in the prompt box to develop.
 - For img2img, drop an image in the **Img2img** tab. It is scaled and center-cropped to the chosen size.
   Lower denoise keeps more of the original.
-- For edits, pick Qwen-Image 2.1 or FLUX 3 Klein, drop the image in the **Edit** tab and write the change as the
-  prompt. The output keeps the image's aspect ratio at the chosen base resolution. To combine images, add them under
-  **More reference images** and refer to them as `<image1>`, `<image2>`, … with Qwen-Image, or as *the first image*,
-  *the second image* with FLUX 3; the image to edit is the first. Say where things go in terms of what the scene
+- For edits, pick Qwen-Image 2.1, FLUX 3 Klein or FireRed Image Edit, drop the image in the **Edit** tab and write
+  the change as the prompt. The output keeps the image's aspect ratio at the chosen base resolution (1 MP with
+  FireRed). To combine images, add them under **More reference images** and refer to them as `<image1>`, `<image2>`,
+  … with Qwen-Image, as *the first image*, *the second image* with FLUX 3, or as *Picture 1*, *Picture 2* with
+  FireRed, which takes up to 3 images; the image to edit is the first. Say where things go in terms of what the scene
   holds; an instruction the scene can't satisfy, such as a wall that isn't there, gets reinterpreted. With Qwen-Image,
   **Expand prompt** runs its edit enhancer. Edit can't be combined with Img2img. On the L40S a 1 MP edit takes about
   20 s with Qwen-Image Turbo or FLUX 3 without the upsampler, and about 50 to 60 s with Qwen-Image base or the FLUX 3
@@ -206,6 +226,7 @@ uv run darkroom
 | 🔴 Cannot reach ComfyUI | ComfyUI isn't running at `COMFYUI_URL`, or the URL is wrong. |
 | New model missing on Modal | The running container predates the download. Stop it (see the Modal section). |
 | 0 models | No models in `ComfyUI/models/checkpoints` (or `diffusion_models` for Z-Image). Add one and click **Connect / refresh models**. |
+| FireRed: value not in list | The text encoder `qwen_2.5_vl_7b_fp8_scaled.safetensors` or VAE `qwen_image_vae.safetensors` is missing. |
 | MOSS-Image: value not in list | The text encoder `qwen3.5_9b_bf16.safetensors` or VAE `flux2-vae_small.safetensors` is missing. |
 | Qwen-Image: value not in list | The text encoder `qwen3vl_8b_bf16.safetensors` or VAE `qwen_image_2.1_vae_bf16.safetensors` is missing. |
 | FLUX 3: value not in list | A FLUX 3 text encoder, upsampler or VAE is missing. See the FLUX 3 files above. |

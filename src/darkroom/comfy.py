@@ -88,9 +88,22 @@ def is_moss(model: str) -> bool:
     return "moss_image" in model.lower()
 
 
+# FireRed Image Edit 1.1, as in ComfyUI's template (Apache 2.0): edit only, up to 3 images. Darkroom lists it a
+# second time with this suffix to run it with the template's 8-step Lightning LoRA.
+FIRERED_TEXT_ENCODER = "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+FIRERED_VAE = "qwen_image_vae.safetensors"
+FIRERED_LORA = "FireRed-Image-Edit-1.0-Lightning-8steps-v1.0.safetensors"
+LIGHTNING = " + Lightning"
+FIRERED_MAX_IMAGES = 3
+
+
+def is_firered(model: str) -> bool:
+    return "firered" in model.lower()
+
+
 def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
-    return is_flux3(model) or is_qwen_image(model)
+    return is_flux3(model) or is_qwen_image(model) or is_firered(model)
 
 
 def can_expand(model: str) -> bool:
@@ -212,6 +225,31 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
                 "sampling_mode.presence_penalty": 1.5, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+    elif is_firered(p.checkpoint):
+        if not p.edit_images:
+            raise ValueError("FireRed Image Edit only edits images")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {
+                "unet_name": p.checkpoint.removesuffix(LIGHTNING), "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": FIRERED_TEXT_ENCODER, "type": "qwen_image"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": FIRERED_VAE}},
+            # The image to edit sets the canvas, scaled to 1 MP; the other references go in as they are.
+            "resize": {"class_type": "ResizeImageMaskNode", "inputs": {
+                "input": ["ref0", 0], "resize_type": "scale total pixels", "resize_type.megapixels": 1.0,
+                "scale_method": "lanczos"}},
+        }
+        model = ["unet", 0]
+        if p.checkpoint.endswith(LIGHTNING):
+            g["lora"] = {"class_type": "LoraLoaderModelOnly", "inputs": {
+                "model": model, "lora_name": FIRERED_LORA, "strength_model": 1.0}}
+            model = ["lora", 0]
+        g["shift"] = {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": model, "shift": 3.1}}
+        g["norm"] = {"class_type": "CFGNorm", "inputs": {"model": ["shift", 0], "strength": 1.0}}
+        images = {f"image{i + 1}": ["resize", 0] if i == 0 else [f"ref{i}", 0] for i in range(len(p.edit_images))}
+        for key, text in (("pos", p.prompt), ("neg", p.negative)):
+            g[key] = {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": text, **images}}
+        model, clip, vae, empty_latent = ["norm", 0], None, ["vae", 0], "EmptyLatentImage"
     elif is_zimage(p.checkpoint):
         g: dict = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -224,7 +262,9 @@ def build_workflow(p: Params) -> dict:
         g = {"ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": p.checkpoint}}}
         model, clip, vae, empty_latent = ["ckpt", 0], ["ckpt", 1], ["ckpt", 2], "EmptyLatentImage"
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
-    if clip is None:
+    if is_firered(p.checkpoint):
+        positive, negative = ["pos", 0], ["neg", 0]
+    elif clip is None:
         positive, negative = ["text", 0], ["text", 1]
     else:
         g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip}}
@@ -242,6 +282,10 @@ def build_workflow(p: Params) -> dict:
             positive, negative = ["refs", 0], ["refs", 1]
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
+        elif is_firered(p.checkpoint):
+            # Sampling starts from the encoded image to edit, at full denoise (the template's latent).
+            g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["resize", 0], "vae": vae}}
+            g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["encode", 0], "amount": p.batch}}
         else:
             g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["text", 2], "amount": p.batch}}
         denoise = 1.0
@@ -320,10 +364,13 @@ class ComfyClient:
         return info[1].get("options", [])
 
     def checkpoints(self) -> list[str]:
-        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image, MOSS-Image)."""
+        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
+        MOSS-Image, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
+        lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
+        firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
-            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u)]
+            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

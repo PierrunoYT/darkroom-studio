@@ -51,6 +51,13 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/MOSS-Image", "diffusion_models/moss_image_base_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/MOSS-Image", "text_encoders/qwen3.5_9b_bf16.safetensors"),
     ("vae", "Comfy-Org/MOSS-Image", "vae/flux2-vae_small.safetensors"),
+    # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
+    # Apache 2.0.
+    ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
+    ("loras", "FireRedTeam/FireRed-Image-Edit-1.0-ComfyUI", "FireRed-Image-Edit-1.0-Lightning-8steps-v1.0.safetensors"),
+    ("vae", "FireRedTeam/FireRed-Image-Edit-1.0-ComfyUI", "qwen_image_vae.safetensors"),
+    ("text_encoders", "Comfy-Org/HunyuanVideo_1.5_repackaged",
+     "split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors"),
 ]
 FOLDERS = sorted({folder for folder, _, _ in MODELS})
 

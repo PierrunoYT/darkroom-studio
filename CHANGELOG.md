@@ -46,6 +46,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   are already downloaded.
 - Qwen-Image 2.1 edit prompt enhancer, following ComfyUI's edit template: in edit mode, Expand prompt runs the
   i2i enhancer, which sees the images and rewrites the instruction. The Modal download step fetches it.
+- FireRed Image Edit 1.1 (Apache 2.0), an edit-only model, following ComfyUI's official template: the Qwen2.5-VL 7B
+  text encoder, the Qwen-Image VAE, AuraFlow shift 3.1 and CFGNorm, up to 3 images, 40 steps at CFG 4. When its
+  Lightning LoRA is installed, the model list also has a `+ Lightning` entry that samples in 8 steps at CFG 1. The
+  Modal download step fetches it, and the status line now shows the size of the developed image.
 
 ### Changed
 
