@@ -8,7 +8,7 @@ import math
 import os
 import uuid
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib.resources import files
 
 import requests
@@ -211,6 +211,19 @@ def is_lens(model: str) -> bool:
     return model.lower().startswith("lens_")
 
 
+# HiDream O1 Image (MIT), as in ComfyUI's templates: one checkpoint with its own text encoder and VAE, for text-to-image
+# and edits. Full: 40 dpmpp_2m_sde_gpu steps at CFG 5 with patch seam smoothing; Dev: 28 LCM steps at CFG 1. Sizes are
+# multiples of 32. It is trained at about 4 MP (2048 x 2048): edits at 1 MP come out as noise. The optional prompt
+# refiner runs Gemma 4 E4B with the template's instructions and chat format. Darkroom runs it for text-to-image only: the
+# template's raw chat prompt has no place for the image, so for edits it rewrote the instruction into a new scene.
+HIDREAM_REFINER = "gemma4_e4b_it_fp8_scaled.safetensors"
+HIDREAM_REFINER_PROMPT = files("darkroom").joinpath("hidream_o1_pe_prompt.txt").read_text()
+
+
+def is_hidream(model: str) -> bool:
+    return "hidream_o1" in model.lower()
+
+
 def is_edit_only(model: str) -> bool:
     return is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model)
 
@@ -231,14 +244,14 @@ def is_firered(model: str) -> bool:
 def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
-            or is_joyai(model) or is_boogu_edit(model)
+            or is_joyai(model) or is_boogu_edit(model) or is_hidream(model)
             or is_fibo(model))
 
 
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
     return (is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
-            or is_krea(model) or is_fibo(model))
+            or is_krea(model) or is_fibo(model) or is_hidream(model))
 
 
 def _canvas(width: int, height: int) -> str:
@@ -249,10 +262,13 @@ def _canvas(width: int, height: int) -> str:
 def build_workflow(p: Params) -> dict:
     """Build a ComfyUI API-format graph: txt2img, img2img when init_image is set, or an instruction edit when
     edit_images is set."""
+    if is_hidream(p.checkpoint):
+        p = replace(p, width=p.width // 32 * 32, height=p.height // 32 * 32)
     if p.edit_images and not can_edit(p.checkpoint):
         raise ValueError(f"{p.checkpoint} cannot edit images; use Qwen-Image 2.1 or FLUX 3 Klein")
     # Ming's edit template has no prompt enhancer.
-    expand = can_expand(p.checkpoint) and p.upsample and not (p.edit_images and is_ming(p.checkpoint))
+    expand = (can_expand(p.checkpoint) and p.upsample
+              and not (p.edit_images and (is_ming(p.checkpoint) or is_hidream(p.checkpoint))))
     prompt = ["upsample", 0] if expand else p.prompt
     if is_flux3(p.checkpoint):
         g = {
@@ -485,6 +501,43 @@ def build_workflow(p: Params) -> dict:
                 **{f"images.image{i + 1}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], None
+    elif is_hidream(p.checkpoint):
+        dev = "dev" in p.checkpoint.lower()
+        g = {
+            "ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": p.checkpoint}},
+            "noise_scale": {"class_type": "ModelNoiseScale", "inputs": {
+                "model": ["ckpt", 0], "noise_scale": 7.6 if dev else 8.0}},
+            "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["ckpt", 1]}},
+            "neg": {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": ["ckpt", 1]}},
+        }
+        model = ["noise_scale", 0]
+        if not dev:
+            g["seams"] = {"class_type": "HiDreamO1PatchSeamSmoothing", "inputs": {
+                "model": model, "start_percent": 0.8, "end_percent": 1.0, "pattern": "single_shift",
+                "passes": "ramp_2_4", "blend": "median", "strength": 1.0}}
+            model = ["seams", 0]
+        if p.edit_images:
+            g["refs"] = {"class_type": "HiDreamO1ReferenceImages", "inputs": {
+                "positive": ["pos", 0], "negative": ["neg", 0],
+                **{f"images.image_{i + 1}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}}
+        if expand:
+            g["refiner"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": HIDREAM_REFINER, "type": "stable_diffusion"}}
+            g["refine"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["refiner", 0],
+                "prompt": f"{HIDREAM_REFINER_PROMPT}<|turn>user\n{p.prompt.strip()}<|turn|>\n<|turn>model\n",
+                "max_length": 2048, "thinking": False, "use_default_template": False,
+                "sampling_mode": "on", "sampling_mode.temperature": 0.7, "sampling_mode.top_k": 64,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0.05, "sampling_mode.repetition_penalty": 1.05,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
+            # The refiner answers in JSON, sometimes fenced; the prompt is its "prompt" field.
+            g["unfence_start"] = {"class_type": "RegexReplace", "inputs": {
+                "string": ["refine", 0], "regex_pattern": "^```(?:json)?\\s*\\n?", "replace": ""}}
+            g["unfence_end"] = {"class_type": "RegexReplace", "inputs": {
+                "string": ["unfence_start", 0], "regex_pattern": "\\n?```\\s*$", "replace": ""}}
+            g["upsample"] = {"class_type": "JsonExtractString", "inputs": {
+                "json_string": ["unfence_end", 0], "key": "prompt"}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+        clip, vae, empty_latent = None, ["ckpt", 2], "EmptyHiDreamO1LatentImage"
     elif is_lens(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -569,8 +622,10 @@ def build_workflow(p: Params) -> dict:
             g["shift"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": model, "shift": 3.0}}
             model, clip = ["shift", 0], ["clip", 0]
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
-    if (is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint)
-            or (is_boogu(p.checkpoint) and not p.edit_images)):
+    if is_hidream(p.checkpoint) and p.edit_images:
+        positive, negative = ["refs", 0], ["refs", 1]
+    elif (is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint)
+            or is_hidream(p.checkpoint) or (is_boogu(p.checkpoint) and not p.edit_images)):
         positive, negative = ["pos", 0], ["neg", 0]
     elif is_ming(p.checkpoint):
         positive, negative = ["pos", 0], None  # guided without a negative (BasicGuider)
@@ -592,7 +647,7 @@ def build_workflow(p: Params) -> dict:
             positive, negative = ["refs", 0], ["refs", 1]
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
-        elif is_ming(p.checkpoint) or is_joyai(p.checkpoint) or is_boogu(p.checkpoint):
+        elif is_ming(p.checkpoint) or is_joyai(p.checkpoint) or is_boogu(p.checkpoint) or is_hidream(p.checkpoint):
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
         elif is_firered(p.checkpoint):
@@ -650,6 +705,17 @@ def build_workflow(p: Params) -> dict:
         g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
             "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
             "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
+    elif is_hidream(p.checkpoint):
+        # The templates' sampler: Dev samples with LCM at raised noise, the full model with the chosen sampler.
+        g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
+            "model": ["noise_scale", 0], "scheduler": p.scheduler, "steps": p.steps, "denoise": denoise}}
+        g["sampler"] = ({"class_type": "SamplerLCM", "inputs": {"s_noise": 1.0, "s_noise_end": 1.0,
+                                                                "noise_clip_std": 2.5}}
+                        if "dev" in p.checkpoint.lower()
+                        else {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}})
+        g["sample"] = {"class_type": "SamplerCustom", "inputs": {
+            "model": model, "add_noise": True, "noise_seed": p.seed, "cfg": p.cfg, "positive": positive,
+            "negative": negative, "sampler": ["sampler", 0], "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
     elif is_lens(p.checkpoint):
         # The templates' sampler: the schedule comes from the shifted model, before CFGNorm.
         g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {

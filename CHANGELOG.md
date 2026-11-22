@@ -85,6 +85,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   already has; the Modal download step fetches the two models.
 - Lens and Lens Turbo (Microsoft, MIT), following ComfyUI's templates: GPT-OSS 20B as the text encoder, a Flux-style
   shift and CFGNorm; 20 steps at CFG 5, or 4 at CFG 1. The Modal download step fetches them.
+- HiDream O1 full and Dev (MIT), following ComfyUI's templates, for text-to-image and editing at about 4 MP: a new
+  2048 base resolution, which picking it sets. The templates' Gemma 4 E4B prompt refiner (off by default) runs for
+  text-to-image. The Modal download step fetches them.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

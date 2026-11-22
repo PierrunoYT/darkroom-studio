@@ -16,14 +16,15 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   with [Krea 2 Turbo](https://huggingface.co/krea/Krea-2-Turbo), an 8-step model built for aesthetic, stylized images,
   and with [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) from Bria (CC BY-NC), which generates from structured
   scene captions, with [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) Turbo (Apache 2.0), and with
-  Microsoft's [Lens](https://huggingface.co/microsoft/Lens) (MIT)
+  Microsoft's [Lens](https://huggingface.co/microsoft/Lens) (MIT), and with
+  [HiDream O1](https://huggingface.co/HiDream-ai/HiDream-O1-Image) (MIT), which renders at about 4 MP
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
 - **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein,
   [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev),
-  [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) (Apache 2.0, edit only), Boogu Image 0.1 Edit
-  and
+  [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) (Apache 2.0, edit only), Boogu Image 0.1 Edit,
+  HiDream O1 and
   [FireRed Image Edit 1.1](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1) (Apache 2.0, edit only): drop an
   image in the **Edit** tab and describe the change, such as *make it night time with rain*, optionally with more
   reference images
@@ -288,6 +289,23 @@ it as `lens_flux2-vae.safetensors`. Darkroom lists any diffusion model whose nam
 graph from ComfyUI's templates: a Flux-style shift, CFGNorm, `euler` and `simple`. The templates use a 1440 base
 resolution; picking Lens sets 1024, which is faster. The NVFP4 text encoder also runs on GPUs without FP4 support, such
 as the L40S.
+
+For [HiDream O1](https://huggingface.co/HiDream-ai/HiDream-O1-Image) (MIT), download the checkpoints (about 24 GB)
+from [Comfy-Org/HiDream-O1-Image](https://huggingface.co/Comfy-Org/HiDream-O1-Image), and for its optional prompt
+refiner Gemma 4 E4B (9 GB) from [Comfy-Org/gemma-4](https://huggingface.co/Comfy-Org/gemma-4):
+
+```
+ComfyUI/models/checkpoints/hidream_o1_image_bf16.safetensors               (40 steps, CFG 5)
+ComfyUI/models/checkpoints/hidream_o1_image_dev_fp8_scaled.safetensors     (28 steps, CFG 1)
+ComfyUI/models/text_encoders/gemma4_e4b_it_fp8_scaled.safetensors
+```
+
+Darkroom lists any checkpoint whose name contains `hidream_o1` and builds the graph from ComfyUI's templates. The same
+checkpoints generate from text and edit. HiDream O1 is trained at about 4 MP, so picking it sets the 2048 base
+resolution; edits at 1024 came out as noise. The refiner (off by default, as in the templates) rewrites the prompt
+with the template's instructions; Darkroom runs it for text-to-image only, because for edits it cannot see the image and
+rewrote the instruction into a new scene. On an L40S at 2560×1440, Dev takes about 15 seconds for an image and 35 for an
+edit; the full model about a minute.
 
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),

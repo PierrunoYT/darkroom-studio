@@ -101,6 +101,11 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/Lens", "diffusion_models/lens_turbo_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/Lens", "text_encoders/gpt_oss_20b_nvfp4.safetensors"),
     ("vae", "Comfy-Org/Lens", "vae/flux2-vae.safetensors", "lens_flux2-vae.safetensors"),
+    # HiDream O1 Image (MIT), full bf16 and Dev fp8 as in ComfyUI's templates: single checkpoints with their own text
+    # encoder and VAE (about 24 GB), plus Gemma 4 E4B for the templates' prompt refiner (about 9 GB).
+    ("checkpoints", "Comfy-Org/HiDream-O1-Image", "checkpoints/hidream_o1_image_bf16.safetensors"),
+    ("checkpoints", "Comfy-Org/HiDream-O1-Image", "checkpoints/hidream_o1_image_dev_fp8_scaled.safetensors"),
+    ("text_encoders", "Comfy-Org/gemma-4", "text_encoders/gemma4_e4b_it_fp8_scaled.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
