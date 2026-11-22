@@ -60,6 +60,7 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/MOSS-Image", "diffusion_models/moss_image_base_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/MOSS-Image", "text_encoders/qwen3.5_9b_bf16.safetensors"),
     ("vae", "Comfy-Org/MOSS-Image", "vae/flux2-vae_small.safetensors"),
+    ("loras", "Comfy-Org/MOSS-Image", "loras/moss_image_edit_lora_rank_64_bf16.safetensors"),  # edit LoRA (about 0.3 GB)
     # Ideogram 4, fp8, as in ComfyUI's template: a conditional and an unconditional model plus a Qwen3-VL 8B text
     # encoder; the FLUX.2 VAE comes with FLUX 3 above (about 27 GB). Ideogram non-commercial license.
     ("diffusion_models", "Comfy-Org/Ideogram-4", "diffusion_models/ideogram4_fp8_scaled.safetensors"),
@@ -81,6 +82,7 @@ MODELS = [
     # Krea 2 Turbo, fp8 as in ComfyUI's template (about 18 GB), with its Qwen3-VL 4B encoder stored under its own name;
     # the VAE is FireRed's below. Krea 2 Community License: commercial use under $1M annual revenue.
     ("diffusion_models", "Comfy-Org/Krea-2", "diffusion_models/krea2_turbo_fp8_scaled.safetensors"),
+    ("diffusion_models", "Comfy-Org/Krea-2", "diffusion_models/krea2_raw_fp8_scaled.safetensors"),  # Raw, undistilled
     ("text_encoders", "Comfy-Org/Krea-2", "text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
      "krea2_qwen3vl_4b_fp8_scaled.safetensors"),
     # Fibo 2.0 Dev and Edit Turbo (Bria, CC BY-NC 4.0: non-commercial), int8 as in ComfyUI's edit templates (about 17
@@ -95,6 +97,10 @@ MODELS = [
     # text encoder is Ideogram 4's file and its VAE Z-Image's.
     ("diffusion_models", "Comfy-Org/Boogu-Image", "diffusion_models/boogu_image_turbo_fp8_scaled.safetensors"),
     ("diffusion_models", "Comfy-Org/Boogu-Image", "diffusion_models/boogu_image_edit_int8_convrot.safetensors"),
+    # Base and the Edit Turbo 1K hotfix Boogu recommends (about 21 GB)
+    ("diffusion_models", "Comfy-Org/Boogu-Image", "diffusion_models/boogu_image_base_fp8_scaled.safetensors"),
+    ("diffusion_models", "Comfy-Org/Boogu-Image",
+     "diffusion_models/boogu_image_edit_turbo_hotfix_1k_20260708_int8_convrot.safetensors"),
     # Lens and Lens Turbo (Microsoft, MIT), bf16 as in ComfyUI's templates, with GPT-OSS 20B (NVFP4) as the text encoder
     # (about 30 GB). Its FLUX.2 VAE differs from FLUX 3's file of the same name, so it is stored under its own name.
     ("diffusion_models", "Comfy-Org/Lens", "diffusion_models/lens_bf16.safetensors"),

@@ -160,6 +160,12 @@ MOSS-Image templates: 25 steps, CFG 2.5, `er_sde`, `simple`, and skip-layer guid
 text encoder doubles as the prompt upsampler, so expanding the prompt needs no extra download. MOSS-Image is under
 Apache 2.0.
 
+For editing, also download `loras/moss_image_edit_lora_rank_64_bf16.safetensors` into `ComfyUI/models/loras/`. Darkroom
+then lists the SFT checkpoint a second time as `+ Edit LoRA` and builds the graph from ComfyUI's MOSS-Image edit
+template: 30 steps at CFG 4 with layer 22 skipped, up to 10 images, no upsampler. Phrase edits as the LoRA was trained:
+*Change only the X to Y. Keep the background and composition unchanged.* It handles object-level changes, such as a
+color, material or garment, but ignored scene-wide changes like time of day and did not rewrite text.
+
 For Ideogram 4, download from [Comfy-Org/Ideogram-4](https://huggingface.co/Comfy-Org/Ideogram-4) (about 27 GB);
 it also uses the FLUX.2 VAE from the FLUX 3 files above:
 
@@ -196,7 +202,9 @@ Darkroom lists any diffusion model whose name contains `ming_image` and builds t
 template runs the rewriter on Qwen3.8 27B, which writes about one token a second on an L40S, so an image would take
 most of an hour; Darkroom runs it on MOSS-Image's Qwen3.5 9B text encoder (`qwen3.5_9b_bf16.safetensors`) instead.
 Put the text you want rendered in quotes. Picking it sets 1024; the templates get their best quality at 2048. It also
-edits, with up to 8 images; refer to them as *the first image*, *the second image*.
+edits, with up to 8 images; refer to them as *the first image*, *the second image*. Darkroom leaves out the repo's
+Design-Layer model: it splits a finished design into RGBA layers from a layer plan, rather than generating or editing an
+image, and ComfyUI has no workflow for it.
 
 For [Mage-Flow](https://github.com/microsoft/Mage), Microsoft's compact 4B model (MIT), download (about 26 GB) from
 [Comfy-Org/Mage-Flow](https://huggingface.co/Comfy-Org/Mage-Flow):
@@ -219,7 +227,8 @@ For [Krea 2 Turbo](https://huggingface.co/krea/Krea-2-Turbo) (Krea 2 Community L
 $1M annual revenue), download (about 18 GB) from [Comfy-Org/Krea-2](https://huggingface.co/Comfy-Org/Krea-2):
 
 ```
-ComfyUI/models/diffusion_models/krea2_turbo_fp8_scaled.safetensors
+ComfyUI/models/diffusion_models/krea2_turbo_fp8_scaled.safetensors   (Turbo, 8 steps, CFG 1)
+ComfyUI/models/diffusion_models/krea2_raw_fp8_scaled.safetensors     (Raw, 52 steps, CFG 3.5; about 13 GB more)
 ComfyUI/models/text_encoders/krea2_qwen3vl_4b_fp8_scaled.safetensors
 ComfyUI/models/vae/qwen_image_vae.safetensors
 ```
@@ -227,7 +236,8 @@ ComfyUI/models/vae/qwen_image_vae.safetensors
 The text encoder is `text_encoders/qwen3vl_4b_fp8_scaled.safetensors` in that repo; save it as
 `krea2_qwen3vl_4b_fp8_scaled.safetensors` so it cannot clash with other Qwen3-VL 4B files. The VAE is the same file
 FireRed uses. Darkroom lists any diffusion model whose name contains `krea2` and builds the graph from ComfyUI's
-template: 8 steps at CFG 1. The template's prompt refiner, run on Krea's own text encoder, is on by default; it keeps
+template: 8 steps at CFG 1 against a zeroed negative. Raw, the undistilled model, has no template; it runs the same graph
+at its model card's 52 steps and CFG 3.5 with the negative prompt. The template's prompt refiner, run on Krea's own text encoder, is on by default; it keeps
 the scene but adds a no-text clause unless you quote the words to render.
 
 For [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) from Bria (CC BY-NC 4.0: non-commercial use only), which
@@ -262,19 +272,23 @@ ComfyUI/models/vae/wan_2.1_vae.safetensors
 Darkroom lists any diffusion model whose name contains `joyai` and builds the graph from ComfyUI's template: 40 steps
 at CFG 4 with CFGNorm, `euler` and `normal`. It takes up to 6 images. It is slow: about 4 minutes an edit on an L40S.
 
-For [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) (Apache 2.0), download (about 22 GB) from
+For [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) (Apache 2.0), download (about 43 GB) from
 [Comfy-Org/Boogu-Image](https://huggingface.co/Comfy-Org/Boogu-Image):
 
 ```
 ComfyUI/models/diffusion_models/boogu_image_turbo_fp8_scaled.safetensors     (text-to-image, 4 steps)
+ComfyUI/models/diffusion_models/boogu_image_base_fp8_scaled.safetensors      (text-to-image, 30 steps, CFG 4)
 ComfyUI/models/diffusion_models/boogu_image_edit_int8_convrot.safetensors    (edit)
+ComfyUI/models/diffusion_models/boogu_image_edit_turbo_hotfix_1k_20260708_int8_convrot.safetensors   (edit, 4 steps)
 ```
 
 It also needs Ideogram 4's text encoder (`qwen3vl_8b_fp8_scaled.safetensors`, the same file as Boogu's) and Z-Image's
 `ae.safetensors` VAE. Darkroom lists any diffusion model whose name contains `boogu` and builds the graph from ComfyUI's
 templates: Turbo runs 4 `lcm` steps at CFG 1 with `sgm_uniform`; the edit checkpoint runs 25 `dpmpp_2m` steps at CFG
-3.5 with a shift of 3.16 and only edits, while Turbo only generates from text. On an L40S, Turbo takes under 30 seconds
-and an edit about 2 minutes.
+3.5 with a shift of 3.16. Base and Edit Turbo have no template; they run the edit template's sampler at their model
+card's settings (Base 30 steps at CFG 4 with the negative prompt; Edit Turbo, the 1K hotfix Boogu recommends, 4 steps at
+CFG 1). The edit checkpoints only edit, and the others only generate from text. On an L40S, Turbo and Edit Turbo take
+under 30 seconds, Base under a minute, and an edit about 2 minutes.
 
 For [Lens](https://huggingface.co/microsoft/Lens) from Microsoft (MIT), download (about 30 GB) from
 [Comfy-Org/Lens](https://huggingface.co/Comfy-Org/Lens):

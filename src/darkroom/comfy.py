@@ -122,6 +122,16 @@ def is_moss(model: str) -> bool:
     return "moss_image" in model.lower()
 
 
+# MOSS-Image's edit LoRA, as in ComfyUI's template: on the SFT checkpoint, which Darkroom lists a second time with this
+# suffix. It edits only: 30 steps at CFG 4 with layer 22 skipped for the whole schedule, up to 10 images.
+MOSS_EDIT_LORA = "moss_image_edit_lora_rank_64_bf16.safetensors"
+MOSS_EDIT = " + Edit LoRA"
+
+
+def is_moss_edit(model: str) -> bool:
+    return is_moss(model) and model.endswith(MOSS_EDIT)
+
+
 # Ming Image 0.1 Design, as in ComfyUI's templates (MIT): a 6B model for UI, posters and other text-heavy layouts.
 # Text-to-image runs the authors' rewriter first; the template runs it on Qwen3.8 27B, which generates about one token
 # a second on an L40S, so Darkroom runs it on MOSS-Image's Qwen3.5 9B. Edits take up to 8 images and sample with LCM.
@@ -150,7 +160,8 @@ def is_mage_edit(model: str) -> bool:
     return is_mage(model) and "edit" in model.lower()
 
 
-# Krea 2 Turbo, as in ComfyUI's template (Krea 2 Community License): 8 steps at CFG 1 against a zeroed negative.
+# Krea 2 Turbo, as in ComfyUI's template (Krea 2 Community License): 8 steps at CFG 1 against a zeroed negative. Krea 2
+# Raw, the undistilled model, runs the same graph at its model card's 52 steps and CFG 3.5 with a real negative.
 # Its own text encoder refines the prompt first (on by default), with the template's instructions in front of it.
 KREA_TEXT_ENCODER = "krea2_qwen3vl_4b_fp8_scaled.safetensors"  # stored under this name, as Mage-Flow's
 KREA_REFINER_PROMPT = files("darkroom").joinpath("krea2_pe_prompt.txt").read_text().strip()
@@ -189,7 +200,8 @@ def is_joyai(model: str) -> bool:
 
 # Boogu Image 0.1 (Apache 2.0), as in ComfyUI's templates: a Turbo text-to-image checkpoint (4 LCM steps at CFG 1
 # against a zeroed negative) and an edit checkpoint (25 dpmpp_2m steps at CFG 3.5; the shift of 3.16 only shapes the
-# schedule). Its Qwen3-VL 8B encoder is Ideogram 4's file and its VAE Z-Image's.
+# schedule). Base (text-to-image, CFG 4) and Edit Turbo (the 1K hotfix, 4 steps at CFG 1) have no template; they run
+# the edit template's sampler at their model card's settings. Its Qwen3-VL 8B encoder is Ideogram 4's file and its VAE Z-Image's.
 BOOGU_TEXT_ENCODER = IDEOGRAM_TEXT_ENCODER
 
 
@@ -237,7 +249,8 @@ def is_ernie(model: str) -> bool:
 
 
 def is_edit_only(model: str) -> bool:
-    return is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model) or is_longcat_edit(model)
+    return (is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model) or is_longcat_edit(model)
+            or is_moss_edit(model))
 
 
 # LongCat-Image and LongCat-Image-Edit (Meituan, Apache 2.0), as in ComfyUI's templates. Both use FireRed's Qwen2.5-VL 7B
@@ -272,12 +285,14 @@ def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
             or is_joyai(model) or is_boogu_edit(model) or is_hidream(model) or is_longcat_edit(model)
+            or is_moss_edit(model)
             or is_fibo(model))
 
 
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
-    return (is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
+    return (is_flux3(model) or is_qwen_image(model) or (is_moss(model) and not is_moss_edit(model)) or is_ideogram(model)
+            or is_ming(model)
             or is_krea(model) or is_fibo(model) or is_hidream(model) or is_ernie(model))
 
 
@@ -331,6 +346,30 @@ def build_workflow(p: Params) -> dict:
                     f"images.image{i}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}
                 g["upsample"]["inputs"]["image"] = ["ref_batch", 0]
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+    elif is_moss_edit(p.checkpoint):
+        if not p.edit_images:
+            raise ValueError("MOSS-Image's edit LoRA only edits images")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {
+                "unet_name": p.checkpoint.removesuffix(MOSS_EDIT), "weight_dtype": "default"}},
+            "lora": {"class_type": "LoraLoaderModelOnly", "inputs": {
+                "model": ["unet", 0], "lora_name": MOSS_EDIT_LORA, "strength_model": 1.0}},
+            "slg": {"class_type": "SkipLayerGuidanceDiTSimple", "inputs": {
+                "model": ["lora", 0], "double_layers": "", "single_layers": "22", "start_percent": 0,
+                "end_percent": 1.0}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": MOSS_TEXT_ENCODER, "type": "moss_image"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": MOSS_VAE}},
+            # References enter at the size they arrive with, so the image to edit is scaled to the output size.
+            "resize": {"class_type": "ImageScale", "inputs": {
+                "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
+                "crop": "center"}},
+        }
+        images = {f"images.image_{i}": ["resize", 0] if i == 0 else [f"ref{i}", 0] for i in range(len(p.edit_images))}
+        for key, text in (("pos", p.prompt), ("neg", p.negative)):
+            g[key] = {"class_type": "TextEncodeMOSSImageEdit", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": text, "edit_format": "Moss-Image-Edit",
+                "image_strength": 1.0, **images}}
+        model, clip, vae, empty_latent = ["slg", 0], None, ["vae", 0], "EmptyFlux2LatentImage"
     elif is_moss(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -627,14 +666,16 @@ def build_workflow(p: Params) -> dict:
         model, clip, vae, empty_latent = ["norm", 0], ["clip", 0], ["vae", 0], "EmptyLatentImage"
     elif is_boogu(p.checkpoint):
         if is_boogu_edit(p.checkpoint) != bool(p.edit_images):
-            raise ValueError("Boogu's edit checkpoint only edits, and its Turbo checkpoint doesn't")
+            raise ValueError("Boogu's edit checkpoints only edit, and its text-to-image checkpoints don't")
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
             "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": BOOGU_TEXT_ENCODER, "type": "boogu"}},
             "vae": {"class_type": "VAELoader", "inputs": {"vae_name": ZIMAGE_VAE}},
         }
-        if p.edit_images:
+        turbo_t2i = "turbo" in p.checkpoint.lower() and not p.edit_images
+        if not turbo_t2i:  # the edit template's schedule shift; Base uses it too
             g["shift"] = {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["unet", 0], "shift": 3.16}}
+        if p.edit_images:
             g["resize"] = {"class_type": "ImageScale", "inputs": {
                 "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
                 "crop": "center"}}
@@ -644,7 +685,8 @@ def build_workflow(p: Params) -> dict:
                    for i in range(len(p.edit_images))}}}
         else:
             g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.prompt, "clip": ["clip", 0]}}
-            g["neg"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}}
+            g["neg"] = ({"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}} if turbo_t2i
+                        else {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": ["clip", 0]}})
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyLatentImage"
     elif is_joyai(p.checkpoint):
         if not p.edit_images:
@@ -670,7 +712,10 @@ def build_workflow(p: Params) -> dict:
             "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": KREA_TEXT_ENCODER, "type": "krea2"}},
             "vae": {"class_type": "VAELoader", "inputs": {"vae_name": FIRERED_VAE}},  # the same Qwen-Image VAE
             "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["clip", 0]}},
-            "neg": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}},
+            # Turbo runs at CFG 1 against a zeroed negative; Raw uses the negative prompt.
+            "neg": ({"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}}
+                    if "turbo" in p.checkpoint.lower()
+                    else {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": ["clip", 0]}}),
         }
         if expand:
             g["upsample"] = {"class_type": "TextGenerate", "inputs": {
@@ -701,6 +746,8 @@ def build_workflow(p: Params) -> dict:
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
     if is_hidream(p.checkpoint) and p.edit_images:
         positive, negative = ["refs", 0], ["refs", 1]
+    elif is_moss_edit(p.checkpoint):
+        positive, negative = ["pos", 0], ["neg", 0]
     elif (is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint)
             or is_hidream(p.checkpoint) or is_ernie(p.checkpoint) or is_longcat(p.checkpoint) or (is_boogu(p.checkpoint) and not p.edit_images)):
         positive, negative = ["pos", 0], ["neg", 0]
@@ -724,7 +771,8 @@ def build_workflow(p: Params) -> dict:
             positive, negative = ["refs", 0], ["refs", 1]
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
-        elif is_ming(p.checkpoint) or is_joyai(p.checkpoint) or is_boogu(p.checkpoint) or is_hidream(p.checkpoint):
+        elif (is_ming(p.checkpoint) or is_joyai(p.checkpoint) or is_boogu(p.checkpoint) or is_hidream(p.checkpoint)
+              or is_moss_edit(p.checkpoint)):
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
         elif is_longcat(p.checkpoint):
@@ -804,8 +852,8 @@ def build_workflow(p: Params) -> dict:
         g["sample"] = {"class_type": "SamplerCustom", "inputs": {
             "model": model, "add_noise": True, "noise_seed": p.seed, "cfg": p.cfg, "positive": positive,
             "negative": negative, "sampler": ["sampler", 0], "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
-    elif is_boogu_edit(p.checkpoint):
-        # The template's sampler: the schedule comes from the shifted model, sampling from the unshifted one.
+    elif is_boogu(p.checkpoint) and "shift" in g:
+        # The edit template's sampler: the schedule comes from the shifted model, sampling from the unshifted one.
         g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
             "model": ["shift", 0], "scheduler": p.scheduler, "steps": p.steps, "denoise": denoise}}
         g["sampler"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}}
@@ -876,6 +924,8 @@ class ComfyClient:
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
+        if MOSS_EDIT_LORA in self._choices("LoraLoaderModelOnly", "lora_name"):
+            unets = unets + [u + MOSS_EDIT for u in unets if is_moss(u) and "sft" in u.lower()]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
             or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or (is_ideogram(u) and "unconditional" not in u)] + firered

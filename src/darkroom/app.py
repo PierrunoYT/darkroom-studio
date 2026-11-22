@@ -113,20 +113,24 @@ def _preset(model: str):
         return (2048, 28, 1, "lcm", "normal") if "dev" in model.lower() else (2048, 40, 5, "dpmpp_2m_sde_gpu", "normal")
     if is_lens(model):  # ComfyUI's Lens templates (they use 1440; 1024 is faster)
         return (1024, 4, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 20, 5, "euler", "simple")
-    if is_boogu(model):  # ComfyUI's Boogu Image 0.1 templates: Turbo text-to-image and edit
-        return (1024, 25, 3.5, "dpmpp_2m", "simple") if "edit" in model.lower() else (1024, 4, 1, "lcm", "sgm_uniform")
+    if is_boogu(model):  # ComfyUI's Boogu templates (Turbo, Edit); Base and Edit Turbo from their model cards
+        if "turbo" in model.lower():
+            return (1024, 4, 1, "dpmpp_2m", "simple") if "edit" in model.lower() else (1024, 4, 1, "lcm", "sgm_uniform")
+        return (1024, 25, 3.5, "dpmpp_2m", "simple") if "edit" in model.lower() else (1024, 30, 4, "dpmpp_2m", "simple")
     if is_joyai(model):  # ComfyUI's JoyAI Image Edit template
         return 1024, 40, 4, "euler", "normal"
     if is_fibo(model):  # ComfyUI's Fibo 2.0 templates: Edit Turbo is distilled to 4 steps at CFG 1
         return (1024, 4, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 50, 5, "euler", "simple")
-    if is_krea(model):  # ComfyUI's Krea 2 Turbo template
-        return 1024, 8, 1, "euler", "simple"
+    if is_krea(model):  # ComfyUI's Krea 2 Turbo template; Raw: its model card
+        return (1024, 8, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 52, 3.5, "euler", "simple")
     if is_ming(model):  # ComfyUI's Ming Image 0.1 Design templates (2048 is their best size, 1024 faster)
         return 1024, 12, 1, "euler", "simple"
     if is_ideogram(model):  # ComfyUI's Ideogram 4 template, Default preset (12 steps picks Turbo, 48 Quality)
         return 1024, 20, 7, "euler", "simple"
     if is_firered(model):  # ComfyUI's FireRed Image Edit 1.1 template, with and without the Lightning LoRA
         return (1024, 8, 1, "euler", "simple") if model.endswith(LIGHTNING) else (1024, 40, 4, "euler", "simple")
+    if is_moss(model) and model.endswith(" + Edit LoRA"):  # ComfyUI's MOSS-Image edit template
+        return 1024, 30, 4, "euler", "normal"
     if is_moss(model):  # ComfyUI's MOSS-Image templates
         return 1024, 25, 2.5, "er_sde", "simple"
     if is_qwen_turbo(model):  # fixed 8-step schedule; steps and scheduler are ignored
@@ -207,7 +211,7 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
         raise gr.Error("This model only edits: drop an image in the Edit tab.")
     if edit_image is not None:
         if not can_edit(ckpt):
-            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, Boogu Edit, HiDream O1, LongCat-Image-Edit or FireRed Image Edit. Pick one of them, or "
+            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, LongCat-Image-Edit or FireRed Image Edit. Pick one of them, or "
                            "clear the Edit tab.")
         if init_image is not None:
             raise gr.Error("Use either the Img2img tab or the Edit tab, not both.")
@@ -309,7 +313,7 @@ def build_ui() -> gr.Blocks:
                         denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
                                             info="Lower keeps more of the init image")
                     with gr.Tab("Edit", id="edit"):
-                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, Boogu Edit, HiDream O1, LongCat-Image-Edit and FireRed Image Edit only. Write what to change as the prompt, "
+                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, LongCat-Image-Edit and FireRed Image Edit only. Write what to change as the prompt, "
                                     "such as *make the boat red*. The result keeps this image's shape.")
                         edit_image = gr.Image(label="Image to edit", type="pil", height=260)
                         edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,
