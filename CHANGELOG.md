@@ -54,6 +54,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The contact sheet showed a gap above wide images and cut them off at the bottom; thumbnails now keep each image's
   aspect ratio.
 - The contact sheet now shows each image's seed and prompt as a caption.
+- Mixed wide and tall images left large gaps in the contact sheet; it now stacks thumbnails in three masonry
+  columns.
 
 ### Changed
 

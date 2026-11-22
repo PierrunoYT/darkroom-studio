@@ -32,10 +32,12 @@ CSS = """
 #generate { background: #b3261e; border: none; color: white; }
 #generate:hover { background: #e5483b; }
 #status { min-height: 1.5rem; font-family: ui-monospace, monospace; font-size: 0.85rem; }
-/* Gradio forces square thumbnails, so a wide image sat mid-square with a gap above and was cut off below. */
-#contact .grid-container { grid-auto-rows: auto; align-items: start; }
-#contact .thumbnail-item { aspect-ratio: auto; height: auto; }
-#contact .thumbnail-item img { height: auto; max-height: 480px; }
+/* Gradio's grid gives every row the height of its tallest image, which left gaps under wide images. Stack the
+   thumbnails in three masonry columns instead, each keeping its whole image. */
+#contact .grid-container { display: block; columns: 3; column-gap: var(--spacing-lg); }
+#contact .gallery-item { break-inside: avoid; margin-bottom: var(--spacing-lg); }
+#contact .thumbnail-item { aspect-ratio: auto; height: auto; width: 100%; }
+#contact .thumbnail-item img { height: auto; width: 100%; }
 """
 
 THEME = gr.themes.Base(
