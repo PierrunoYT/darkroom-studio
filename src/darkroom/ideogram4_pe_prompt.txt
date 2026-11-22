@@ -284,3 +284,5 @@ If the user's idea calls for transparent background, transparent canvas, alpha c
 Do not paraphrase (no `clear backdrop`, `empty alpha`, `no background`, `PNG transparency`).
 
 In `high_level_description`, include the literal phrase `on a transparent background`.
+
+Otherwise, and that is almost every idea, NEVER use a transparent background. A photo, scene, poster, illustration or any idea that names a place, setting or environment gets a real, fully described `background` with its scenery, surface or color, and the words `transparent`, `cutout`, `isolated` and `alpha` must not appear anywhere in the output.

@@ -62,6 +62,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   captioner, on by default, rewrites the prompt into the structured caption the model expects, using the template's
   caption prompt on the Qwen3.5 9B encoder; without it the built-in safety filter blocks most plain prompts. The Modal
   download step fetches it.
+- The Ideogram 4 captioner no longer picks a transparent background on its own: Darkroom adds a rule to the template's
+  caption prompt so it uses one only when the prompt asks for it.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

@@ -63,7 +63,8 @@ def is_sd3_turbo(model: str) -> bool:
 # model with text-free conditioning; the schedule's mu and std follow the template's Turbo/Default/Quality presets.
 IDEOGRAM_TEXT_ENCODER = "qwen3vl_8b_fp8_scaled.safetensors"
 # Ideogram 4 is trained on structured JSON captions, and its built-in safety filter blocks most plain prompts. The
-# template's caption prompt turns an idea into that JSON; Darkroom runs it on MOSS-Image's Qwen3.5 9B encoder.
+# template's caption prompt turns an idea into that JSON; Darkroom runs it on MOSS-Image's Qwen3.5 9B encoder. Darkroom
+# adds one rule to it: no transparent background unless the idea asks for one (it sometimes picked one unprompted).
 IDEOGRAM_UPSAMPLER_PROMPT = files("darkroom").joinpath("ideogram4_pe_prompt.txt").read_text().strip()
 
 
