@@ -31,6 +31,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Z-Image base: picking `z_image_bf16` sets ComfyUI's base template settings (25 steps, CFG 4, `res_multistep`,
   `simple`) instead of the Turbo ones.
 - The Modal download step also fetches Z-Image base and the FLUX 3 Klein base checkpoint.
+- MOSS-Image support (SFT and Base, Apache 2.0), following ComfyUI's official templates: the Qwen3.5 9B text
+  encoder, the small FLUX.2 VAE, 25 steps, CFG 2.5, `er_sde`, and skip-layer guidance for Base. Its text encoder
+  runs the prompt upsampler, which is on by default.
+- The Modal download step also fetches MOSS-Image SFT and Base.
 
 - Images are saved to `~/Pictures/Darkroom` (or `DARKROOM_OUTPUT_DIR`) as PNGs with the generation settings
   embedded, and the contact sheet shows that folder, newest first, across restarts. Clicking an image shows its

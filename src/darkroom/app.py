@@ -11,7 +11,7 @@ import gradio as gr
 from PIL import Image, PngImagePlugin
 from websocket import WebSocketException
 
-from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, can_expand, is_flux3, is_qwen_image, is_qwen_turbo, is_zimage
+from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, can_expand, is_flux3, is_moss, is_qwen_image, is_qwen_turbo, is_zimage
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
@@ -79,16 +79,20 @@ def presets(model: str | None):
     """Recommended base resolution, steps, CFG, sampler, scheduler, and upsampler visibility for a model."""
     if not model:
         return (gr.update(),) * 6
-    # On by default for FLUX 3 (BFL's workflows), off for Qwen-Image (ComfyUI's template; it adds a slow rewrite).
-    upsampler = gr.update(visible=can_expand(model), value=is_flux3(model),
-                          label="Expand prompt with the FLUX 3 upsampler" if is_flux3(model)
-                          else "Expand prompt with the Qwen-Image enhancer")
+    # On by default for FLUX 3 and MOSS-Image (their workflows), off for Qwen-Image (ComfyUI's template; it adds a
+    # slow rewrite).
+    name = "FLUX 3 upsampler" if is_flux3(model) else "MOSS-Image upsampler" if is_moss(model) \
+        else "Qwen-Image enhancer"
+    upsampler = gr.update(visible=can_expand(model), value=is_flux3(model) or is_moss(model),
+                          label=f"Expand prompt with the {name}")
     return (*_preset(model), upsampler)
 
 
 def _preset(model: str):
     if is_flux3(model):  # Black Forest Labs' FLUX 3 Klein workflows
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
+    if is_moss(model):  # ComfyUI's MOSS-Image templates
+        return 1024, 25, 2.5, "er_sde", "simple"
     if is_qwen_turbo(model):  # fixed 8-step schedule; steps and scheduler are ignored
         return 1024, 8, 1, "euler", "simple"
     if is_qwen_image(model):  # ComfyUI's Qwen-Image 2.1 template
@@ -217,7 +221,7 @@ def build_ui() -> gr.Blocks:
                                            "before sampling. Turn off when yours already is one.")
                     aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
                     base = gr.Radio([512, 768, 1024], value=512, label="Base resolution",
-                                    info="512 for SD 1.5, 1024 for SDXL, Z-Image, FLUX 3 and Qwen-Image")
+                                    info="512 for SD 1.5, 1024 for SDXL, Z-Image, FLUX 3, Qwen-Image and MOSS")
                     custom_size = gr.Checkbox(label="Custom size", value=False)
                     with gr.Row(visible=False) as custom_row:
                         width = gr.Slider(64, 2048, 512, step=64, label="Width")

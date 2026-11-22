@@ -10,8 +10,10 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
 - **txt2img and img2img** with any checkpoint ComfyUI can load (SD 1.5, SDXL, and other single-file checkpoints)
   and with [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo), which renders photoreal images and legible
   text in 8 steps, with [FLUX 3 Image Klein](https://bfl.ai/blog/flux-3-image-klein) from Black Forest Labs, and
-  with [Qwen-Image 2.1](https://github.com/QwenLM/Qwen-Image), which is strong at typography and dense text
-- **Prompt expansion:** FLUX 3 Klein's upsampler (on by default) and Qwen-Image 2.1's prompt enhancer (off by default)
+  with [Qwen-Image 2.1](https://github.com/QwenLM/Qwen-Image), which is strong at typography and dense text, and
+  with [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) (Apache 2.0), strong at long text and layouts
+- **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers (on by default) and Qwen-Image 2.1's prompt
+  enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
 - **Model presets:** picking a model sets its recommended resolution, steps, CFG, sampler and scheduler
 - **Live development:** a step-by-step progress bar and latent previews while the image renders
@@ -108,6 +110,20 @@ Two optional extras from the same repo:
 - **Prompt enhancer** (`text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors`, 9.5 GB): tick
   **Expand prompt with the Qwen-Image enhancer** to have it rewrite your prompt first. It reasons before writing, as
   its model card recommends, which takes a few minutes per image (about 4 minutes on an L40S).
+
+For MOSS-Image, download from [Comfy-Org/MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image) (about 30 GB for
+one checkpoint):
+
+```
+ComfyUI/models/diffusion_models/moss_image_sft_bf16.safetensors   (or moss_image_base_bf16.safetensors)
+ComfyUI/models/text_encoders/qwen3.5_9b_bf16.safetensors
+ComfyUI/models/vae/flux2-vae_small.safetensors
+```
+
+Darkroom lists any diffusion model whose name contains `moss_image` and builds the graph from ComfyUI's official
+MOSS-Image templates: 25 steps, CFG 2.5, `er_sde`, `simple`, and skip-layer guidance for the Base checkpoint. The
+text encoder doubles as the prompt upsampler, so expanding the prompt needs no extra download. MOSS-Image is under
+Apache 2.0.
 Apple Silicon works through PyTorch's MPS backend with the default torch install.
 Without a GPU, install the CPU build of torch and start ComfyUI with `--cpu`. That works but is slow: a 512×512
 SD 1.5 image takes several minutes, and the model needs about 6 GB of free RAM.
@@ -160,6 +176,9 @@ uv run darkroom
   results. Picking a model sets this for you.
 - Z-Image Turbo, the distilled FLUX 3 Klein and Qwen-Image 2.1 (base and Turbo) run at CFG 1, where the negative prompt has no effect. Describe what
   you want in the prompt instead.
+- MOSS-Image uses its negative prompt (CFG 2.5). Its recommended one is
+  `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`; drop `text` from the default negative when you want
+  lettering in the image.
 - With FLUX 3, keep the upsampler on for short prompts. Turn it off only when you write a full scene caption yourself;
   the **Expanded prompt** box shows what a good one looks like.
 - Press Enter in the prompt box to develop.
@@ -174,6 +193,7 @@ uv run darkroom
 | 🔴 Cannot reach ComfyUI | ComfyUI isn't running at `COMFYUI_URL`, or the URL is wrong. |
 | New model missing on Modal | The running container predates the download. Stop it (see the Modal section). |
 | 0 models | No models in `ComfyUI/models/checkpoints` (or `diffusion_models` for Z-Image). Add one and click **Connect / refresh models**. |
+| MOSS-Image: value not in list | The text encoder `qwen3.5_9b_bf16.safetensors` or VAE `flux2-vae_small.safetensors` is missing. |
 | Qwen-Image: value not in list | The text encoder `qwen3vl_8b_bf16.safetensors` or VAE `qwen_image_2.1_vae_bf16.safetensors` is missing. |
 | FLUX 3: value not in list | A FLUX 3 text encoder, upsampler or VAE is missing. See the FLUX 3 files above. |
 | Z-Image: value not in list | The text encoder `qwen_3_4b.safetensors` or VAE `ae.safetensors` is missing. See the Z-Image files above. |
@@ -188,6 +208,7 @@ src/darkroom/app.py      Gradio UI and generation flow
 src/darkroom/comfy.py    ComfyUI client (HTTP + websocket) and workflow builder
 src/darkroom/flux3_upsampler_prompt.txt  BFL's system prompt for the FLUX 3 upsampler (MIT)
 src/darkroom/qwen_image_pe_prompt.txt    system prompt for the Qwen-Image 2.1 prompt enhancer (ComfyUI template)
+src/darkroom/moss_image_pe_prompt.txt    system prompt for the MOSS-Image upsampler (ComfyUI template)
 modal_comfyui.py         ComfyUI on a Modal GPU
 ```
 

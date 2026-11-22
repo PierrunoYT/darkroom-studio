@@ -72,9 +72,19 @@ def is_qwen_turbo(model: str) -> bool:
     return is_qwen_image(model) and "turbo" in model.lower()
 
 
+# MOSS-Image, as in ComfyUI's official templates (Apache 2.0). Its text encoder also runs the prompt upsampler.
+MOSS_TEXT_ENCODER = "qwen3.5_9b_bf16.safetensors"
+MOSS_VAE = "flux2-vae_small.safetensors"
+MOSS_UPSAMPLER_PROMPT = files("darkroom").joinpath("moss_image_pe_prompt.txt").read_text().strip()
+
+
+def is_moss(model: str) -> bool:
+    return "moss_image" in model.lower()
+
+
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
-    return is_flux3(model) or is_qwen_image(model)
+    return is_flux3(model) or is_qwen_image(model) or is_moss(model)
 
 
 def _canvas(width: int, height: int) -> str:
@@ -106,6 +116,27 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode": "on", "sampling_mode.temperature": 1, "sampling_mode.top_k": 1,
                 "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
                 "sampling_mode.presence_penalty": 1.5, "sampling_mode.seed": p.seed}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+    elif is_moss(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": MOSS_TEXT_ENCODER, "type": "moss_image"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": MOSS_VAE}},
+        }
+        model, clip, vae, empty_latent = ["unet", 0], ["clip", 0], ["vae", 0], "EmptyFlux2LatentImage"
+        if "base" in p.checkpoint.lower():
+            # The Base template skips layer 22 on the negative branch for the first half; the SFT one does not.
+            g["slg"] = {"class_type": "SkipLayerGuidanceDiTSimple", "inputs": {
+                "model": ["unet", 0], "double_layers": "", "single_layers": "22",
+                "start_percent": 0, "end_percent": 0.5}}
+            model = ["slg", 0]
+        if p.upsample:
+            g["upsample"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["clip", 0], "system_prompt": MOSS_UPSAMPLER_PROMPT, "prompt": p.prompt.strip(),
+                "max_length": 4096, "thinking": False, "use_default_template": True, "mtp": "auto",
+                "sampling_mode": "on", "sampling_mode.temperature": 0.7, "sampling_mode.top_k": 64,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0.05, "sampling_mode.repetition_penalty": 1,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
     elif is_qwen_image(p.checkpoint):
         g = {
@@ -225,10 +256,10 @@ class ComfyClient:
         return info[1].get("options", [])
 
     def checkpoints(self) -> list[str]:
-        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image)."""
+        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image, MOSS-Image)."""
         unets = self._choices("UNETLoader", "unet_name")
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
-            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u)]
+            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u)]
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")
