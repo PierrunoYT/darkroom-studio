@@ -11,7 +11,7 @@ import gradio as gr
 from PIL import Image, PngImagePlugin
 from websocket import WebSocketException
 
-from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, can_expand, is_flux3, is_moss, is_qwen_image, is_qwen_turbo, is_zimage
+from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, can_edit, can_expand, is_flux3, is_moss, is_qwen_image, is_qwen_turbo, is_zimage
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
@@ -150,27 +150,42 @@ def describe(evt: gr.SelectData):
 
 
 def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_size,
-             steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample):
+             steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample,
+             edit_image, edit_refs):
     if not ckpt:
         raise gr.Error("No model selected. Connect to ComfyUI and pick one.")
     if not prompt.strip():
         raise gr.Error("Write a prompt first.")
-    if not custom_size:
+    edit_refs = [ref[0] if isinstance(ref, tuple) else ref for ref in (edit_refs or [])]
+    if edit_image is not None:
+        if not can_edit(ckpt):
+            raise gr.Error("Editing needs Qwen-Image 2.1 or FLUX 3 Klein. Pick one of them, or clear the Edit tab.")
+        if init_image is not None:
+            raise gr.Error("Use either the Img2img tab or the Edit tab, not both.")
+        if 1 + len(edit_refs) > 10:
+            raise gr.Error("Editing takes up to 10 images in total.")
+        # The result keeps the edited image's shape, at about base x base pixels.
+        a, b = edit_image.size
+        scale = (int(base) ** 2 / (a * b)) ** 0.5
+        width, height = max(256, round(a * scale / 16) * 16), max(256, round(b * scale / 16) * 16)
+    elif not custom_size:
         width, height = size_for(aspect, int(base))
     seed = random.randint(0, MAX_SEED) if randomize else int(seed)
 
     client = ComfyClient(url)
     try:
         init_name = client.upload(init_image) if init_image is not None else None
+        edit_names = [client.upload(im) for im in [edit_image, *edit_refs]] if edit_image is not None else []
         params = Params(
             checkpoint=ckpt, prompt=prompt, negative=negative, width=int(width), height=int(height),
             steps=int(steps), cfg=float(cfg), sampler=sampler, scheduler=scheduler, seed=seed,
             batch=int(batch), denoise=float(denoise), init_image=init_name, upsample=bool(upsample),
+            edit_images=edit_names,
         )
         expanded = gr.update(visible=False)
-        if can_expand(ckpt) and upsample:
+        if can_expand(ckpt) and upsample and not (edit_names and is_qwen_image(ckpt)):
             expanded = gr.update(value="Expanding the prompt…", visible=True)
-        mode = "img2img" if init_name else "txt2img"
+        mode = "edit" if edit_names else "img2img" if init_name else "txt2img"
         yield gr.update(), gr.update(), f"⏳ Queued {mode} · {width}×{height} · seed {seed}", seed, expanded
         for event in client.run(build_workflow(params)):
             if event[0] == "progress":
@@ -240,6 +255,16 @@ def build_ui() -> gr.Blocks:
                     init_image = gr.Image(label="Init image (optional)", type="pil", height=260)
                     denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
                                         info="Lower keeps more of the init image")
+                with gr.Tab("Edit"):
+                    gr.Markdown("Qwen-Image 2.1 and FLUX 3 Klein only. Write what to change as the prompt, "
+                                "such as *make the boat red*. The result keeps this image's shape.")
+                    edit_image = gr.Image(label="Image to edit", type="pil", height=260)
+                    edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,
+                                           columns=4, height=160, file_types=["image"],
+                                           elem_id="edit_refs")
+                    gr.Markdown("With Qwen-Image, refer to the images as `<image1>`, `<image2>`, …; with FLUX 3, "
+                                "as *the first image*, *the second image*. Up to 10 images in total.",
+                                elem_classes="hint")
                 with gr.Tab("Connection"):
                     url = gr.Textbox(label="ComfyUI URL", value=DEFAULT_URL)
                     refresh_btn = gr.Button("Connect / refresh models")
@@ -264,7 +289,7 @@ def build_ui() -> gr.Blocks:
         custom_size.change(lambda c: gr.update(visible=c), custom_size, custom_row)
 
         inputs = [url, ckpt, prompt, negative, aspect, base, width, height, custom_size,
-                  steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample]
+                  steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample, edit_image, edit_refs]
         outputs = [preview, gallery, status, seed, expanded]
         generate_btn.click(generate, inputs, outputs, concurrency_limit=1)
         prompt.submit(generate, inputs, outputs, concurrency_limit=1)

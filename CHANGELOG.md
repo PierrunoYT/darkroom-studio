@@ -39,6 +39,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Images are saved to `~/Pictures/Darkroom` (or `DARKROOM_OUTPUT_DIR`) as PNGs with the generation settings
   embedded, and the contact sheet shows that folder, newest first, across restarts. Clicking an image shows its
   path and settings; Refresh contact sheet picks up files added by hand.
+- Edit mode for Qwen-Image 2.1 (base and Turbo) and FLUX 3 Klein (distilled and base): an Edit tab takes the image
+  to edit plus up to 9 more reference images, and the prompt says what to change. The output keeps the edited
+  image's aspect ratio at the base resolution. Qwen-Image encodes the images with its text encoder; FLUX 3 uses
+  reference latents, and its upsampler uses BFL's edit system prompt and sees the images. Both use model files that
+  are already downloaded.
 
 ### Changed
 

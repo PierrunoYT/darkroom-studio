@@ -8,7 +8,7 @@ import math
 import os
 import uuid
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 
 import requests
@@ -32,6 +32,8 @@ class Params:
     denoise: float = 1.0
     init_image: str | None = None  # name returned by ComfyClient.upload
     upsample: bool = True  # FLUX 3 and Qwen-Image: expand the prompt with the model's upsampler first
+    # Instruction editing (Qwen-Image 2.1, FLUX 3 Klein): uploaded reference images, the one to edit first.
+    edit_images: list[str] = field(default_factory=list)
 
 
 # Z-Image ships as separate diffusion model, text encoder and VAE files (ComfyUI's official template).
@@ -49,6 +51,7 @@ FLUX3_UPSAMPLER = "qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors"
 FLUX3_VAE = "flux2-vae.safetensors"
 FLUX3_SHIFT = math.log(16)  # the workflows' timestep shift: mu = ln(alpha), alpha = 16
 FLUX3_SYSTEM_PROMPT = files("darkroom").joinpath("flux3_upsampler_prompt.txt").read_text().strip()
+FLUX3_EDIT_SYSTEM_PROMPT = files("darkroom").joinpath("flux3_edit_upsampler_prompt.txt").read_text().strip()
 
 
 def is_flux3(model: str) -> bool:
@@ -82,6 +85,11 @@ def is_moss(model: str) -> bool:
     return "moss_image" in model.lower()
 
 
+def can_edit(model: str) -> bool:
+    """Models that take an instruction plus reference images."""
+    return is_flux3(model) or is_qwen_image(model)
+
+
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
     return is_flux3(model) or is_qwen_image(model) or is_moss(model)
@@ -93,8 +101,13 @@ def _canvas(width: int, height: int) -> str:
 
 
 def build_workflow(p: Params) -> dict:
-    """Build a ComfyUI API-format graph for txt2img, or img2img when init_image is set."""
-    prompt = ["upsample", 0] if can_expand(p.checkpoint) and p.upsample else p.prompt
+    """Build a ComfyUI API-format graph: txt2img, img2img when init_image is set, or an instruction edit when
+    edit_images is set."""
+    if p.edit_images and not can_edit(p.checkpoint):
+        raise ValueError(f"{p.checkpoint} cannot edit images; use Qwen-Image 2.1 or FLUX 3 Klein")
+    # Qwen's enhancer is the text-to-image one; editing would need its separate i2i enhancer.
+    expand = can_expand(p.checkpoint) and p.upsample and not (p.edit_images and is_qwen_image(p.checkpoint))
+    prompt = ["upsample", 0] if expand else p.prompt
     if is_flux3(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -105,17 +118,29 @@ def build_workflow(p: Params) -> dict:
             "vae": {"class_type": "VAELoader", "inputs": {"vae_name": FLUX3_VAE}},
         }
         model, clip, vae, empty_latent = ["shift", 0], ["clip", 0], ["vae", 0], "EmptyFlux2LatentImage"
-        if p.upsample:
+        if expand:
             # Klein is trained on full scene captions; its upsampler LLM expands a short prompt into one.
+            # For edits it also looks at the reference images, as in BFL's image-to-image workflow.
             g["upsampler"] = {"class_type": "CLIPLoader",
                               "inputs": {"clip_name": FLUX3_UPSAMPLER, "type": "flux3"}}
+            if p.edit_images:
+                system, request = FLUX3_EDIT_SYSTEM_PROMPT, (
+                    "Reference images follow in order (the first image, the second image, ...).\n"
+                    f"User request: {p.prompt.strip()}\nOutput the caption.")
+            else:
+                system, request = FLUX3_SYSTEM_PROMPT, f"TARGET CANVAS: {_canvas(p.width, p.height)}\n{p.prompt.strip()}"
             g["upsample"] = {"class_type": "TextGenerate", "inputs": {
-                "clip": ["upsampler", 0], "system_prompt": FLUX3_SYSTEM_PROMPT,
-                "prompt": f"TARGET CANVAS: {_canvas(p.width, p.height)}\n{p.prompt.strip()}",
+                "clip": ["upsampler", 0], "system_prompt": system,
+                "prompt": request,
                 "max_length": 3584, "thinking": False, "use_default_template": True, "mtp": "off",
                 "sampling_mode": "on", "sampling_mode.temperature": 1, "sampling_mode.top_k": 1,
                 "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
                 "sampling_mode.presence_penalty": 1.5, "sampling_mode.seed": p.seed}}
+            if p.edit_images:
+                g["upsample"]["inputs"]["sampling_mode.presence_penalty"] = 0  # BFL's i2i setting
+                g["ref_batch"] = {"class_type": "BatchImagesNode", "inputs": {
+                    f"images.image{i}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}
+                g["upsample"]["inputs"]["image"] = ["ref_batch", 0]
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
     elif is_moss(p.checkpoint):
         g = {
@@ -130,7 +155,7 @@ def build_workflow(p: Params) -> dict:
                 "model": ["unet", 0], "double_layers": "", "single_layers": "22",
                 "start_percent": 0, "end_percent": 0.5}}
             model = ["slg", 0]
-        if p.upsample:
+        if expand:
             g["upsample"] = {"class_type": "TextGenerate", "inputs": {
                 "clip": ["clip", 0], "system_prompt": MOSS_UPSAMPLER_PROMPT, "prompt": p.prompt.strip(),
                 "max_length": 4096, "thinking": False, "use_default_template": True, "mtp": "auto",
@@ -151,7 +176,15 @@ def build_workflow(p: Params) -> dict:
                 "clip": ["clip", 0], "prompt": prompt, "negative_prompt": p.negative, "resolution": 1024}},
         }
         model, clip, vae, empty_latent = ["cache", 0], None, ["vae", 0], "EmptyLatentImage"
-        if p.upsample:
+        if p.edit_images:
+            # References go into the text encoder; the canvas follows the first one, scaled to about
+            # resolution x resolution pixels (ComfyUI's Qwen-Image 2.1 edit template).
+            text = g["text"]["inputs"]
+            text["vae"] = ["vae", 0]
+            text["resolution"] = max(256, round((p.width * p.height) ** 0.5 / 32) * 32)
+            for i in range(len(p.edit_images)):
+                text[f"images.image_{i + 1}"] = [f"ref{i}", 0]
+        if expand:
             # Qwen's prompt enhancer rewrites the request; it is trained to reason first, so thinking stays on
             # with the token budget from its model card (a smaller one can end mid-reasoning and return nothing).
             g["upsampler"] = {"class_type": "CLIPLoader",
@@ -181,7 +214,22 @@ def build_workflow(p: Params) -> dict:
         g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip}}
         g["neg"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": clip}}
         positive, negative = ["pos", 0], ["neg", 0]
-    if p.init_image:
+    for i, name in enumerate(p.edit_images):
+        g[f"ref{i}"] = {"class_type": "LoadImage", "inputs": {"image": name}}
+    if p.edit_images:
+        if is_flux3(p.checkpoint):
+            # Each reference is resized to 1 MP and attached to the conditioning (BFL's workflow).
+            refs = {f"images.image{i}": [f"ref{i}", 0] for i in range(len(p.edit_images))}
+            g["refs"] = {"class_type": "ReferenceMultiLatent", "inputs": {
+                "positive": positive, "negative": negative, "vae": vae,
+                "resolution": "resize", "resolution.megapixels": 1.0, **refs}}
+            positive, negative = ["refs", 0], ["refs", 1]
+            g["latent"] = {"class_type": empty_latent,
+                           "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
+        else:
+            g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["text", 2], "amount": p.batch}}
+        denoise = 1.0
+    elif p.init_image:
         g["load"] = {"class_type": "LoadImage", "inputs": {"image": p.init_image}}
         g["scale"] = {
             "class_type": "ImageScale",
