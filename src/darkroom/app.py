@@ -8,7 +8,7 @@ import random
 import gradio as gr
 from websocket import WebSocketException
 
-from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, is_zimage
+from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, is_flux3, is_zimage
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
@@ -65,9 +65,16 @@ def size_for(aspect: str, base: int) -> tuple[int, int]:
 
 
 def presets(model: str | None):
-    """Recommended base resolution, steps, CFG, sampler and scheduler for a model."""
+    """Recommended base resolution, steps, CFG, sampler, scheduler, and upsampler visibility for a model."""
     if not model:
-        return (gr.update(),) * 5
+        return (gr.update(),) * 6
+    upsampler = gr.update(visible=is_flux3(model))
+    return (*_preset(model), upsampler)
+
+
+def _preset(model: str):
+    if is_flux3(model):  # Black Forest Labs' FLUX 3 Klein workflows
+        return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
     if is_zimage(model):  # ComfyUI's Z-Image Turbo template
         return 1024, 8, 1, "res_multistep", "simple"
     if "xl" in model.lower():
@@ -76,7 +83,7 @@ def presets(model: str | None):
 
 
 def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_size,
-             steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, history):
+             steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample, history):
     if not ckpt:
         raise gr.Error("No model selected. Connect to ComfyUI and pick one.")
     if not prompt.strip():
@@ -91,29 +98,35 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
         params = Params(
             checkpoint=ckpt, prompt=prompt, negative=negative, width=int(width), height=int(height),
             steps=int(steps), cfg=float(cfg), sampler=sampler, scheduler=scheduler, seed=seed,
-            batch=int(batch), denoise=float(denoise), init_image=init_name,
+            batch=int(batch), denoise=float(denoise), init_image=init_name, upsample=bool(upsample),
         )
+        expanded = gr.update(visible=False)
+        if is_flux3(ckpt) and upsample:
+            expanded = gr.update(value="Expanding the prompt…", visible=True)
         mode = "img2img" if init_name else "txt2img"
-        yield gr.update(), gr.update(), f"⏳ Queued {mode} · {width}×{height} · seed {seed}", seed, history
+        yield gr.update(), gr.update(), f"⏳ Queued {mode} · {width}×{height} · seed {seed}", seed, history, expanded
         for event in client.run(build_workflow(params)):
             if event[0] == "progress":
                 _, value, total = event
                 bar = "█" * int(20 * value / total) + "░" * (20 - int(20 * value / total))
-                yield gr.update(), gr.update(), f"{bar} step {value}/{total} · seed {seed}", seed, history
+                yield gr.update(), gr.update(), f"{bar} step {value}/{total} · seed {seed}", seed, history, gr.update()
             elif event[0] == "preview":
-                yield gr.update(value=event[1], visible=True), gr.update(), gr.update(), seed, history
+                yield gr.update(value=event[1], visible=True), gr.update(), gr.update(), seed, history, gr.update()
             else:
-                images = event[1]
+                images, texts = event[1], event[2]
+                if texts:
+                    expanded = gr.update(value=texts[0], visible=True)
                 captions = [f"seed {seed} · {prompt[:80]}" for _ in images]
                 history = list(zip(images, captions)) + history
                 yield (gr.update(value=None, visible=False), [img for img, _ in history],
-                       f"✅ Developed {len(images)} image(s) · {width}×{height} · seed {seed}", seed, history)
+                       f"✅ Developed {len(images)} image(s) · {width}×{height} · seed {seed}", seed, history,
+                       expanded)
     except ComfyError as e:
         msg = "⏹ Stopped" if str(e) == "Interrupted" else f"🔴 {e}"
-        yield gr.update(visible=False), gr.update(), msg, seed, history
+        yield gr.update(visible=False), gr.update(), msg, seed, history, gr.update(visible=False)
     except (OSError, WebSocketException) as e:
         msg = f"🔴 Lost connection to ComfyUI ({e}). Check the ComfyUI console; it may have run out of memory."
-        yield gr.update(visible=False), gr.update(), msg, seed, history
+        yield gr.update(visible=False), gr.update(), msg, seed, history, gr.update(visible=False)
 
 
 def build_ui() -> gr.Blocks:
@@ -134,9 +147,12 @@ def build_ui() -> gr.Blocks:
                 with gr.Tab("Image"):
                     ckpt = gr.Dropdown(label="Model", choices=[], interactive=True,
                                        info="Picking a model applies its recommended settings")
+                    upsample = gr.Checkbox(label="Expand prompt with the FLUX 3 upsampler", value=True,
+                                           visible=False, info="Klein expects full scene captions. "
+                                           "Turn off only when your prompt already is one.")
                     aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
                     base = gr.Radio([512, 768, 1024], value=512, label="Base resolution",
-                                    info="512 for SD 1.5, 1024 for SDXL and Z-Image")
+                                    info="512 for SD 1.5, 1024 for SDXL, Z-Image and FLUX 3")
                     custom_size = gr.Checkbox(label="Custom size", value=False)
                     with gr.Row(visible=False) as custom_row:
                         width = gr.Slider(64, 2048, 512, step=64, label="Width")
@@ -161,20 +177,22 @@ def build_ui() -> gr.Blocks:
 
             with gr.Column(scale=6):
                 status = gr.Markdown("", elem_id="status")
+                expanded = gr.Textbox(label="Expanded prompt", lines=3, max_lines=8, interactive=False,
+                                      visible=False)
                 preview = gr.Image(label="Developing…", visible=False, interactive=False, height=420)
                 gallery = gr.Gallery(label="Contact sheet", columns=3, height=520, object_fit="contain",
                                      show_label=True, preview=False)
                 clear_btn = gr.Button("Clear contact sheet", size="sm")
 
         connect_outputs = [ckpt, sampler, scheduler, status]
-        ckpt.change(presets, ckpt, [base, steps, cfg, sampler, scheduler])
+        ckpt.change(presets, ckpt, [base, steps, cfg, sampler, scheduler, upsample])
         demo.load(connect, url, connect_outputs)
         refresh_btn.click(connect, url, connect_outputs)
         custom_size.change(lambda c: gr.update(visible=c), custom_size, custom_row)
 
         inputs = [url, ckpt, prompt, negative, aspect, base, width, height, custom_size,
-                  steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, history]
-        outputs = [preview, gallery, status, seed, history]
+                  steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, upsample, history]
+        outputs = [preview, gallery, status, seed, history, expanded]
         generate_btn.click(generate, inputs, outputs, concurrency_limit=1)
         prompt.submit(generate, inputs, outputs, concurrency_limit=1)
         # Interrupting ComfyUI ends the running generate() with an "Interrupted" event.

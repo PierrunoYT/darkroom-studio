@@ -13,6 +13,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Model presets: picking a model sets its recommended base resolution, steps, CFG, sampler and scheduler
   (Z-Image Turbo: 1024, 8 steps, CFG 1, `res_multistep`, `simple`).
 - The Modal download step also fetches Z-Image Turbo into the model Volume.
+- FLUX 3 Image Klein support, following Black Forest Labs' ComfyUI workflows: the model list includes `flux3`
+  diffusion models, which load with the Qwen3-VL 4B text encoder, the FLUX.2 VAE and a timestep shift of ln 16,
+  for txt2img and img2img. Presets: 1024, 16 steps, CFG 1 (distilled) or 50 steps, CFG 3.5 (base).
+- FLUX 3 prompt upsampler, on by default: the Qwen3.5 9B upsampler expands the prompt into a full scene caption
+  for the canvas shape, and an Expanded prompt box shows the result.
+- The Modal download step fetches FLUX 3 Klein from its gated repo using the `huggingface` Modal secret.
 
 ### Changed
 

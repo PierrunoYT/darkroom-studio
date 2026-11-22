@@ -16,6 +16,8 @@ GPU = os.environ.get("DARKROOM_GPU", "L40S")
 SCALEDOWN = 300
 PORT = 8000
 
+FLUX3 = "black-forest-labs/flux-3-image-klein-comfy"
+
 # (ComfyUI model folder, Hugging Face repo, file in the repo)
 MODELS = [
     ("checkpoints", "Comfy-Org/stable-diffusion-v1-5-archive", "v1-5-pruned-emaonly-fp16.safetensors"),
@@ -24,6 +26,12 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/z_image_turbo", "split_files/diffusion_models/z_image_turbo_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/z_image_turbo", "split_files/text_encoders/qwen_3_4b.safetensors"),
     ("vae", "Comfy-Org/z_image_turbo", "split_files/vae/ae.safetensors"),
+    # FLUX 3 Image Klein, distilled, bf16, with its prompt upsampler (about 38 GB). The repo is gated: accept the
+    # license on Hugging Face, then store a token as the Modal secret "huggingface" (HF_TOKEN=hf_...).
+    ("diffusion_models", FLUX3, "diffusion_models/flux3-image-klein-bf16.safetensors"),
+    ("text_encoders", FLUX3, "text_encoders/qwen3vl_4b_bf16.safetensors"),
+    ("text_encoders", FLUX3, "text_encoders/qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors"),
+    ("vae", FLUX3, "vae/flux2-vae.safetensors"),
 ]
 FOLDERS = sorted({folder for folder, _, _ in MODELS})
 
@@ -42,7 +50,7 @@ models = modal.Volume.from_name("darkroom-models", create_if_missing=True)
 app = modal.App("darkroom-comfyui", image=image)
 
 
-@app.function(volumes={"/models": models}, timeout=3600)
+@app.function(volumes={"/models": models}, timeout=3600, secrets=[modal.Secret.from_name("huggingface")])
 def download(extra: str = ""):
     """Download the default models, plus extra checkpoints given as "owner/repo/file.safetensors,..."."""
     from huggingface_hub import hf_hub_download

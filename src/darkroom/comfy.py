@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
+from importlib.resources import files
 
 import requests
 import websocket
@@ -29,6 +31,7 @@ class Params:
     batch: int
     denoise: float = 1.0
     init_image: str | None = None  # name returned by ComfyClient.upload
+    upsample: bool = True  # FLUX 3 Klein only: expand the prompt with BFL's upsampler first
 
 
 # Z-Image ships as separate diffusion model, text encoder and VAE files (ComfyUI's official template).
@@ -40,9 +43,49 @@ def is_zimage(model: str) -> bool:
     return "z_image" in model.lower()
 
 
+# FLUX 3 Image Klein, as in Black Forest Labs' ComfyUI workflows (flux-3-image-klein-comfy, MIT).
+FLUX3_TEXT_ENCODER = "qwen3vl_4b_bf16.safetensors"
+FLUX3_UPSAMPLER = "qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors"
+FLUX3_VAE = "flux2-vae.safetensors"
+FLUX3_SHIFT = math.log(16)  # the workflows' timestep shift: mu = ln(alpha), alpha = 16
+FLUX3_SYSTEM_PROMPT = files("darkroom").joinpath("flux3_upsampler_prompt.txt").read_text().strip()
+
+
+def is_flux3(model: str) -> bool:
+    return "flux3" in model.lower()
+
+
+def _canvas(width: int, height: int) -> str:
+    g = math.gcd(width, height)
+    return f"{width // g}:{height // g}"
+
+
 def build_workflow(p: Params) -> dict:
     """Build a ComfyUI API-format graph for txt2img, or img2img when init_image is set."""
-    if is_zimage(p.checkpoint):
+    prompt = ["upsample", 0] if is_flux3(p.checkpoint) and p.upsample else p.prompt
+    if is_flux3(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "shift": {"class_type": "ModelSamplingFlux", "inputs": {
+                "model": ["unet", 0], "max_shift": FLUX3_SHIFT, "base_shift": FLUX3_SHIFT,
+                "width": p.width, "height": p.height}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": FLUX3_TEXT_ENCODER, "type": "flux3"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": FLUX3_VAE}},
+        }
+        model, clip, vae, empty_latent = ["shift", 0], ["clip", 0], ["vae", 0], "EmptyFlux2LatentImage"
+        if p.upsample:
+            # Klein is trained on full scene captions; its upsampler LLM expands a short prompt into one.
+            g["upsampler"] = {"class_type": "CLIPLoader",
+                              "inputs": {"clip_name": FLUX3_UPSAMPLER, "type": "flux3"}}
+            g["upsample"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["upsampler", 0], "system_prompt": FLUX3_SYSTEM_PROMPT,
+                "prompt": f"TARGET CANVAS: {_canvas(p.width, p.height)}\n{p.prompt.strip()}",
+                "max_length": 3584, "thinking": False, "use_default_template": True, "mtp": "off",
+                "sampling_mode": "on", "sampling_mode.temperature": 1, "sampling_mode.top_k": 1,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
+                "sampling_mode.presence_penalty": 1.5, "sampling_mode.seed": p.seed}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+    elif is_zimage(p.checkpoint):
         g: dict = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
             "shift": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["unet", 0], "shift": 3}},
@@ -54,7 +97,7 @@ def build_workflow(p: Params) -> dict:
         g = {"ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": p.checkpoint}}}
         model, clip, vae, empty_latent = ["ckpt", 0], ["ckpt", 1], ["ckpt", 2], "EmptyLatentImage"
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
-    g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.prompt, "clip": clip}}
+    g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": clip}}
     g["neg"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": clip}}
     if p.init_image:
         g["load"] = {"class_type": "LoadImage", "inputs": {"image": p.init_image}}
@@ -116,9 +159,10 @@ class ComfyClient:
         return info[1].get("options", [])
 
     def checkpoints(self) -> list[str]:
-        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image)."""
+        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3)."""
         unets = self._choices("UNETLoader", "unet_name")
-        return self._choices("CheckpointLoaderSimple", "ckpt_name") + [u for u in unets if is_zimage(u)]
+        return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
+            u for u in unets if is_zimage(u) or is_flux3(u)]
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")
@@ -142,7 +186,8 @@ class ComfyClient:
     def run(self, workflow: dict) -> Iterator[tuple]:
         """Queue a workflow and yield events while it runs.
 
-        Yields ("progress", value, max), ("preview", Image), and finally ("done", [Image, ...]).
+        Yields ("progress", value, max), ("preview", Image), and finally ("done", [Image, ...], [text, ...]),
+        where the texts come from text output nodes such as the FLUX 3 prompt upsampler.
         """
         ws_url = self.url.replace("http", "ws", 1) + f"/ws?clientId={self.client_id}"
         ws = websocket.create_connection(ws_url, timeout=600, header=self.headers)
@@ -180,12 +225,13 @@ class ComfyClient:
             ws.close()
 
         history = self._get(f"/history/{prompt_id}").json()[prompt_id]
-        images = []
+        images, texts = [], []
         for output in history["outputs"].values():
+            texts += output.get("text", [])
             for im in output.get("images", []):
                 raw = self._get("/view", filename=im["filename"], subfolder=im["subfolder"], type=im["type"]).content
                 images.append(Image.open(io.BytesIO(raw)))
-        yield ("done", images)
+        yield ("done", images, texts)
 
 
 def _format_prompt_error(r: requests.Response) -> str:

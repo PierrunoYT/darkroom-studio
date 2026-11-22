@@ -3,13 +3,15 @@
 A local image generation studio: a dark Gradio UI on top of a [ComfyUI](https://github.com/comfyanonymous/ComfyUI) backend.
 Write a prompt, pick a checkpoint, and watch the image develop step by step.
 
-![Darkroom with a Z-Image Turbo result](docs/screenshot.png)
+![Darkroom with a FLUX 3 Klein result](docs/screenshot.png)
 
 ## Features
 
 - **txt2img and img2img** with any checkpoint ComfyUI can load (SD 1.5, SDXL, and other single-file checkpoints)
   and with [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo), which renders photoreal images and legible
-  text in 8 steps
+  text in 8 steps, and with [FLUX 3 Image Klein](https://bfl.ai/blog/flux-3-image-klein) from Black Forest Labs
+- **FLUX 3 prompt upsampler:** Klein's own Qwen3.5 9B upsampler turns a short prompt into the full scene caption the
+  model expects, and Darkroom shows the expanded prompt
 - **Model presets:** picking a model sets its recommended resolution, steps, CFG, sampler and scheduler
 - **Live development:** a step-by-step progress bar and latent previews while the image renders
 - **Aspect ratio sizing:** pick 1:1 to 16:9 and a base resolution (512, 768, 1024); Darkroom picks the
@@ -60,6 +62,21 @@ ComfyUI/models/vae/ae.safetensors
 
 Darkroom lists any diffusion model whose name contains `z_image` and expects the text encoder and VAE under these
 names. Z-Image needs a GPU with about 16 GB or more of VRAM at bf16.
+
+For FLUX 3 Image Klein, accept the license at
+[black-forest-labs/flux-3-image-klein-comfy](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy)
+(gated, FLUX Kommunity License) and download (about 38 GB):
+
+```
+ComfyUI/models/diffusion_models/flux3-image-klein-bf16.safetensors
+ComfyUI/models/text_encoders/qwen3vl_4b_bf16.safetensors
+ComfyUI/models/text_encoders/qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors
+ComfyUI/models/vae/flux2-vae.safetensors
+```
+
+Darkroom lists any diffusion model whose name contains `flux3` and builds the graph from Black Forest Labs' ComfyUI
+workflows. It needs ComfyUI 0.41 or later and, at bf16, a GPU with more than 24 GB of VRAM. The base checkpoint
+(`flux3-image-klein-base-bf16.safetensors`) also works; picking it sets 50 steps and CFG 3.5.
 Apple Silicon works through PyTorch's MPS backend with the default torch install.
 Without a GPU, install the CPU build of torch and start ComfyUI with `--cpu`. That works but is slow: a 512×512
 SD 1.5 image takes several minutes, and the model needs about 6 GB of free RAM.
@@ -73,7 +90,7 @@ generating.
 ```sh
 uv sync --extra modal
 uv run modal setup                                           # once: sign in to Modal
-uv run modal run modal_comfyui.py::download                  # SD 1.5, SDXL base and Z-Image Turbo into a Volume
+uv run modal run modal_comfyui.py::download                  # SD 1.5, SDXL, Z-Image Turbo, FLUX 3 Klein into a Volume
 uv run modal deploy modal_comfyui.py                         # prints https://<workspace>--darkroom-comfyui-comfyui.<region>.modal.run
 uv run modal workspace proxy-tokens create --name darkroom   # prints a token ID (wk-…) and secret (ws-…), shown only once
 
@@ -87,7 +104,10 @@ uv run darkroom
 - **Another GPU:** `DARKROOM_GPU=A10G uv run modal deploy modal_comfyui.py`.
 - **Timing:** the first request after an idle period starts the GPU, which takes about 1 to 2 minutes. After that,
   on the L40S, SD 1.5 at 512×512 with 25 steps takes about 2.5 s, SDXL at 1024×1024 with 30 steps about 15 s,
-  and Z-Image Turbo at 1024×1024 with 8 steps about 4 s.
+  Z-Image Turbo at 1024×1024 with 8 steps about 4 s, and FLUX 3 Klein at 16 steps about 5.5 s, or about 14 s with
+  the prompt upsampler.
+- **FLUX 3 download:** the repo is gated. Accept its license on Hugging Face and store a token as a Modal secret
+  named `huggingface` (`uv run modal secret create huggingface HF_TOKEN=hf_...`) before running the download step.
 
 ## Configuration
 
@@ -103,7 +123,10 @@ uv run darkroom
 
 - Use base resolution 512 for SD 1.5 and 1024 for SDXL and Z-Image; other sizes give duplicated subjects or blurry
   results. Picking a model sets this for you.
-- Z-Image Turbo runs at CFG 1, where the negative prompt has no effect. Describe what you want in the prompt instead.
+- Z-Image Turbo and the distilled FLUX 3 Klein run at CFG 1, where the negative prompt has no effect. Describe what
+  you want in the prompt instead.
+- With FLUX 3, keep the upsampler on for short prompts. Turn it off only when you write a full scene caption yourself;
+  the **Expanded prompt** box shows what a good one looks like.
 - Press Enter in the prompt box to develop.
 - For img2img, drop an image in the **Img2img** tab. It is scaled and center-cropped to the chosen size.
   Lower denoise keeps more of the original.
@@ -115,6 +138,7 @@ uv run darkroom
 |---|---|
 | 🔴 Cannot reach ComfyUI | ComfyUI isn't running at `COMFYUI_URL`, or the URL is wrong. |
 | 0 models | No models in `ComfyUI/models/checkpoints` (or `diffusion_models` for Z-Image). Add one and click **Connect / refresh models**. |
+| FLUX 3: value not in list | A FLUX 3 text encoder, upsampler or VAE is missing. See the FLUX 3 files above. |
 | Z-Image: value not in list | The text encoder `qwen_3_4b.safetensors` or VAE `ae.safetensors` is missing. See the Z-Image files above. |
 | 🔴 Lost connection to ComfyUI | ComfyUI stopped mid-job, usually because it ran out of memory. Check its console; try a smaller size or batch. |
 | HTTP 401 from Modal | `COMFYUI_TOKEN` is missing or wrong. It must be `wk-…` and `ws-…` joined with a dot. |
@@ -125,6 +149,7 @@ uv run darkroom
 ```
 src/darkroom/app.py      Gradio UI and generation flow
 src/darkroom/comfy.py    ComfyUI client (HTTP + websocket) and workflow builder
+src/darkroom/flux3_upsampler_prompt.txt  BFL's system prompt for the FLUX 3 upsampler (MIT)
 modal_comfyui.py         ComfyUI on a Modal GPU
 ```
 
