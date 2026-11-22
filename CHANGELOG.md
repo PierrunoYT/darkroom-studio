@@ -78,6 +78,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   Ideogram 4's Qwen3-VL 8B encoder: the template's prompt for edits, which also looks at the images, and Bria's VGL
   `generate` prompt for text-to-image. The Modal download step fetches the two models; the text encoder,
   VAE and enhancer are files Darkroom already has.
+- JoyAI Image Edit (JD, Apache 2.0), edit only, following ComfyUI's template: 40 steps at CFG 4 with CFGNorm on the
+  Wan 2.1 VAE, with up to 6 images. The Modal download step fetches it.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

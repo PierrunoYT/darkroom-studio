@@ -176,8 +176,19 @@ def is_fibo(model: str) -> bool:
     return "fibo2" in model.lower()
 
 
+# JoyAI Image Edit (JD, Apache 2.0), as in ComfyUI's template: edit only, 40 steps at CFG 4 with CFGNorm, on the Wan 2.1
+# VAE. Its text encoding node takes up to 6 images.
+JOYAI_TEXT_ENCODER = "qwen3vl_8b_joyimage_edit_int8_convrot.safetensors"
+JOYAI_VAE = "wan_2.1_vae.safetensors"
+JOYAI_MAX_IMAGES = 6
+
+
+def is_joyai(model: str) -> bool:
+    return "joyai" in model.lower()
+
+
 def is_edit_only(model: str) -> bool:
-    return is_firered(model) or is_mage_edit(model)
+    return is_firered(model) or is_mage_edit(model) or is_joyai(model)
 
 
 # FireRed Image Edit 1.1, as in ComfyUI's template (Apache 2.0): edit only, up to 3 images. Darkroom lists it a
@@ -196,6 +207,7 @@ def is_firered(model: str) -> bool:
 def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
+            or is_joyai(model)
             or is_fibo(model))
 
 
@@ -449,6 +461,24 @@ def build_workflow(p: Params) -> dict:
                 **{f"images.image{i + 1}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], None
+    elif is_joyai(p.checkpoint):
+        if not p.edit_images:
+            raise ValueError("JoyAI Image Edit only edits images")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "norm": {"class_type": "CFGNorm", "inputs": {"model": ["unet", 0], "strength": 1.0, "pre_cfg": True}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": JOYAI_TEXT_ENCODER, "type": "joyimage"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": JOYAI_VAE}},
+            # The image to edit is scaled to the output size; the template's latent matches it.
+            "resize": {"class_type": "ImageScale", "inputs": {
+                "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
+                "crop": "center"}},
+        }
+        images = {f"images.image{i}": ["resize", 0] if i == 0 else [f"ref{i}", 0] for i in range(len(p.edit_images))}
+        for key, text in (("pos", p.prompt), ("neg", p.negative)):
+            g[key] = {"class_type": "TextEncodeJoyImageEdit", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": text, **images}}
+        model, clip, vae, empty_latent = ["norm", 0], None, ["vae", 0], "EmptySD3LatentImage"
     elif is_krea(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -484,7 +514,7 @@ def build_workflow(p: Params) -> dict:
             g["shift"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": model, "shift": 3.0}}
             model, clip = ["shift", 0], ["clip", 0]
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
-    if is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint):
+    if is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint):
         positive, negative = ["pos", 0], ["neg", 0]
     elif is_ming(p.checkpoint):
         positive, negative = ["pos", 0], None  # guided without a negative (BasicGuider)
@@ -506,7 +536,7 @@ def build_workflow(p: Params) -> dict:
             positive, negative = ["refs", 0], ["refs", 1]
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
-        elif is_ming(p.checkpoint):
+        elif is_ming(p.checkpoint) or is_joyai(p.checkpoint):
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
         elif is_firered(p.checkpoint):
@@ -624,13 +654,13 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

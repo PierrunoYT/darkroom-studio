@@ -20,7 +20,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
 - **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein,
-  [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) and
+  [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev),
+  [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) (Apache 2.0, edit only) and
   [FireRed Image Edit 1.1](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1) (Apache 2.0, edit only): drop an
   image in the **Edit** tab and describe the change, such as *make it night time with rain*, optionally with more
   reference images
@@ -243,6 +244,18 @@ template's prompt, which also looks at the images, and for text-to-image with th
 to render words of the prompt as text in the image. In edits, describe the final result, not what to keep. Dev uses Bria's structured negative and ignores the negative prompt box;
 Turbo runs without one. Refer to several images as `<image_1>`, `<image_2>`. On an L40S, Dev takes about 2 minutes
 for an image and 4 for an edit; Turbo takes about 10 seconds, or 30 to 45 seconds with the enhancer.
+
+For [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) from JD (Apache 2.0), an edit-only model,
+download (about 25 GB) from [Comfy-Org/JoyAI-Image-Edit](https://huggingface.co/Comfy-Org/JoyAI-Image-Edit):
+
+```
+ComfyUI/models/diffusion_models/joyai_image_edit_int8_convrot.safetensors
+ComfyUI/models/text_encoders/qwen3vl_8b_joyimage_edit_int8_convrot.safetensors
+ComfyUI/models/vae/wan_2.1_vae.safetensors
+```
+
+Darkroom lists any diffusion model whose name contains `joyai` and builds the graph from ComfyUI's template: 40 steps
+at CFG 4 with CFGNorm, `euler` and `normal`. It takes up to 6 images. It is slow: about 4 minutes an edit on an L40S.
 
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),

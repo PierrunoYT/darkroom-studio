@@ -87,6 +87,10 @@ MODELS = [
     # GB). Its text encoder is Mage-Flow's file, its VAE FLUX 3's, and its enhancer runs on Ideogram 4's Qwen3-VL 8B.
     ("diffusion_models", "Comfy-Org/Fibo-2.0", "diffusion_models/fibo2_dev_int8_convrot.safetensors"),
     ("diffusion_models", "Comfy-Org/Fibo-2.0", "diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors"),
+    # JoyAI Image Edit (JD, Apache 2.0), int8 as in ComfyUI's template, with the Wan 2.1 VAE (about 25 GB). Edit only.
+    ("diffusion_models", "Comfy-Org/JoyAI-Image-Edit", "diffusion_models/joyai_image_edit_int8_convrot.safetensors"),
+    ("text_encoders", "Comfy-Org/JoyAI-Image-Edit", "text_encoders/qwen3vl_8b_joyimage_edit_int8_convrot.safetensors"),
+    ("vae", "Comfy-Org/JoyAI-Image-Edit", "vae/wan_2.1_vae.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
