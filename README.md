@@ -150,6 +150,27 @@ MOSS-Image templates: 25 steps, CFG 2.5, `er_sde`, `simple`, and skip-layer guid
 text encoder doubles as the prompt upsampler, so expanding the prompt needs no extra download. MOSS-Image is under
 Apache 2.0.
 
+For Ideogram 4, download from [Comfy-Org/Ideogram-4](https://huggingface.co/Comfy-Org/Ideogram-4) (about 27 GB);
+it also uses the FLUX.2 VAE from the FLUX 3 files above:
+
+```
+ComfyUI/models/diffusion_models/ideogram4_fp8_scaled.safetensors
+ComfyUI/models/diffusion_models/ideogram4_unconditional_fp8_scaled.safetensors
+ComfyUI/models/text_encoders/qwen3vl_8b_fp8_scaled.safetensors
+ComfyUI/models/vae/flux2-vae.safetensors
+```
+
+Darkroom lists `ideogram4` diffusion models (not the unconditional one, which it loads alongside) and builds the
+graph from ComfyUI's template: the Ideogram 4 scheduler, CFG 7 against the unconditional model, dropping to 3 for the
+last 30% of steps. Picking it sets 20 steps (the template's Default preset); 12 steps uses its Turbo schedule and 48
+its Quality schedule. It has no negative prompt. Ideogram 4 is trained on structured JSON captions, and its built-in
+safety filter blocks most plain prompts with an "Image blocked by safety filter" image. So **Expand prompt with the
+Ideogram JSON captioner** is on by default: it rewrites your prompt into that JSON with the caption prompt from
+ComfyUI's template, run on MOSS-Image's Qwen3.5 9B text encoder (`qwen3.5_9b_bf16.safetensors`, see MOSS-Image
+above). Turn it off only when you write the JSON yourself; see Ideogram's
+[prompting guide](https://github.com/ideogram-oss/ideogram4/blob/main/docs/prompting.md). Ideogram 4 is under the
+Ideogram **non-commercial** model agreement.
+
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),
 [FireRed-Image-Edit-1.0-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.0-ComfyUI) and
@@ -264,6 +285,7 @@ src/darkroom/flux3_edit_upsampler_prompt.txt  BFL's system prompt for the FLUX 3
 src/darkroom/qwen_image_pe_prompt.txt    system prompt for the Qwen-Image 2.1 prompt enhancer (ComfyUI template)
 src/darkroom/qwen_image_edit_pe_prompt.txt  system prompt for the Qwen-Image 2.1 edit enhancer (ComfyUI template)
 src/darkroom/moss_image_pe_prompt.txt    system prompt for the MOSS-Image upsampler (ComfyUI template)
+src/darkroom/ideogram4_pe_prompt.txt     system prompt for the Ideogram 4 JSON captioner (ComfyUI template)
 modal_comfyui.py         ComfyUI on a Modal GPU
 ```
 

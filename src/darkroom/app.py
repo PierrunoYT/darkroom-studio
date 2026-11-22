@@ -12,7 +12,8 @@ from PIL import Image, PngImagePlugin
 from websocket import WebSocketException
 
 from darkroom.comfy import (FIRERED_MAX_IMAGES, LIGHTNING, ComfyClient, ComfyError, Params, build_workflow, can_edit,
-                            can_expand, is_firered, is_flux3, is_moss, is_qwen_image, is_qwen_turbo, is_sd3,
+                            can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
+                            is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -86,8 +87,8 @@ def presets(model: str | None):
     # On by default for FLUX 3 and MOSS-Image (their workflows), off for Qwen-Image (ComfyUI's template; it adds a
     # slow rewrite).
     name = "FLUX 3 upsampler" if is_flux3(model) else "MOSS-Image upsampler" if is_moss(model) \
-        else "Qwen-Image enhancer"
-    upsampler = gr.update(visible=can_expand(model), value=is_flux3(model) or is_moss(model),
+        else "Ideogram JSON captioner" if is_ideogram(model) else "Qwen-Image enhancer"
+    upsampler = gr.update(visible=can_expand(model), value=is_flux3(model) or is_moss(model) or is_ideogram(model),
                           label=f"Expand prompt with the {name}")
     return (*_preset(model), upsampler)
 
@@ -95,6 +96,8 @@ def presets(model: str | None):
 def _preset(model: str):
     if is_flux3(model):  # Black Forest Labs' FLUX 3 Klein workflows
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
+    if is_ideogram(model):  # ComfyUI's Ideogram 4 template, Default preset (12 steps picks Turbo, 48 Quality)
+        return 1024, 20, 7, "euler", "simple"
     if is_firered(model):  # ComfyUI's FireRed Image Edit 1.1 template, with and without the Lightning LoRA
         return (1024, 8, 1, "euler", "simple") if model.endswith(LIGHTNING) else (1024, 40, 4, "euler", "simple")
     if is_moss(model):  # ComfyUI's MOSS-Image templates

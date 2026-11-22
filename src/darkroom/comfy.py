@@ -59,6 +59,25 @@ def is_sd3_turbo(model: str) -> bool:
     return is_sd3(model) and "turbo" in model.lower()
 
 
+# Ideogram 4, as in ComfyUI's template (Ideogram non-commercial license). Guidance runs a separate unconditional
+# model with text-free conditioning; the schedule's mu and std follow the template's Turbo/Default/Quality presets.
+IDEOGRAM_TEXT_ENCODER = "qwen3vl_8b_fp8_scaled.safetensors"
+# Ideogram 4 is trained on structured JSON captions, and its built-in safety filter blocks most plain prompts. The
+# template's caption prompt turns an idea into that JSON; Darkroom runs it on MOSS-Image's Qwen3.5 9B encoder.
+IDEOGRAM_UPSAMPLER_PROMPT = files("darkroom").joinpath("ideogram4_pe_prompt.txt").read_text().strip()
+
+
+def is_ideogram(model: str) -> bool:
+    return "ideogram4" in model.lower()
+
+
+def _ideogram_schedule(steps: int) -> tuple[float, float]:
+    """(mu, std) of the template preset nearest to this step count: Turbo 12, Default 20, Quality 48."""
+    if steps <= 12:
+        return 0.5, 1.75
+    return (0.0, 1.5) if steps >= 48 else (0.0, 1.75)
+
+
 # FLUX 3 Image Klein, as in Black Forest Labs' ComfyUI workflows (flux-3-image-klein-comfy, MIT).
 FLUX3_TEXT_ENCODER = "qwen3vl_4b_bf16.safetensors"
 FLUX3_UPSAMPLER = "qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors"
@@ -122,7 +141,7 @@ def can_edit(model: str) -> bool:
 
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
-    return is_flux3(model) or is_qwen_image(model) or is_moss(model)
+    return is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model)
 
 
 def _canvas(width: int, height: int) -> str:
@@ -239,6 +258,34 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
                 "sampling_mode.presence_penalty": 1.5, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+    elif is_ideogram(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "uncond": {"class_type": "UNETLoader", "inputs": {
+                "unet_name": p.checkpoint.replace("ideogram4_", "ideogram4_unconditional_", 1),
+                "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": IDEOGRAM_TEXT_ENCODER, "type": "ideogram4"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": FLUX3_VAE}},
+            # The template lowers CFG to 3 for the last 30% of sampling.
+            "late_cfg": {"class_type": "CFGOverride", "inputs": {
+                "model": ["unet", 0], "cfg": 3.0, "start_percent": 0.7, "end_percent": 1.0}},
+            "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["clip", 0]}},
+            # No negative prompt: the unconditional pass drops the text.
+            "neg": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}},
+        }
+        model, clip, vae, empty_latent = ["late_cfg", 0], None, ["vae", 0], "EmptyFlux2LatentImage"
+        if expand:
+            g["upsampler"] = {"class_type": "CLIPLoader",
+                              "inputs": {"clip_name": MOSS_TEXT_ENCODER, "type": "moss_image"}}
+            g["upsample"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["upsampler", 0], "system_prompt": IDEOGRAM_UPSAMPLER_PROMPT,
+                "prompt": f"TARGET IMAGE ASPECT RATIO: {_canvas(p.width, p.height)} (width:height).\n"
+                          f"User idea: {p.prompt.strip()}",
+                "max_length": 4096, "thinking": False, "use_default_template": True, "mtp": "auto",
+                "sampling_mode": "on", "sampling_mode.temperature": 0.7, "sampling_mode.top_k": 20,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
     elif is_firered(p.checkpoint):
         if not p.edit_images:
             raise ValueError("FireRed Image Edit only edits images")
@@ -282,7 +329,7 @@ def build_workflow(p: Params) -> dict:
             g["shift"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": model, "shift": 3.0}}
             model, clip = ["shift", 0], ["clip", 0]
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
-    if is_firered(p.checkpoint):
+    if is_firered(p.checkpoint) or is_ideogram(p.checkpoint):
         positive, negative = ["pos", 0], ["neg", 0]
     elif clip is None:
         positive, negative = ["text", 0], ["text", 1]
@@ -325,7 +372,24 @@ def build_workflow(p: Params) -> dict:
             "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch},
         }
         denoise = 1.0
-    if is_qwen_turbo(p.checkpoint):
+    if is_ideogram(p.checkpoint):
+        # The template's schedule and guider: the conditional model at CFG 7 (3 late) against the unconditional model.
+        mu, std = _ideogram_schedule(p.steps)
+        g["sigmas"] = {"class_type": "Ideogram4Scheduler", "inputs": {
+            "steps": p.steps, "width": p.width, "height": p.height, "mu": mu, "std": std}}
+        sigmas = ["sigmas", 0]
+        if denoise < 1:
+            g["split"] = {"class_type": "SplitSigmasDenoise", "inputs": {"sigmas": sigmas, "denoise": denoise}}
+            sigmas = ["split", 1]
+        g["noise"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": p.seed}}
+        g["guider"] = {"class_type": "DualModelGuider", "inputs": {
+            "model": model, "model_negative": ["uncond", 0], "positive": positive, "negative": negative,
+            "cfg": p.cfg}}
+        g["sampler"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}}
+        g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
+            "sigmas": sigmas, "latent_image": ["latent", 0]}}
+    elif is_qwen_turbo(p.checkpoint):
         # Fixed schedule instead of steps/scheduler; img2img keeps the low-noise tail of it.
         g["sigmas"] = {"class_type": "ManualSigmas", "inputs": {"sigmas": QWEN_TURBO_SIGMAS}}
         sigmas = ["sigmas", 0]
@@ -385,12 +449,13 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
-            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u)] + firered
+            u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u)
+            or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

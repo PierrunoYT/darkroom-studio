@@ -56,6 +56,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - SD 3.5 Large Turbo, following Stability's ComfyUI workflow: it loads CLIP-G, CLIP-L and T5-XXL separately, uses
   shift 3, and picking it sets 4 steps, CFG 1, `dpmpp_2m`, `sgm_uniform`. The Modal download step fetches it from the
   gated repo with the `huggingface` secret.
+- Ideogram 4 (open weights, fp8, non-commercial), following ComfyUI's template: the Qwen3-VL 8B text encoder, the
+  FLUX.2 VAE, the Ideogram 4 scheduler and a dual-model guider against the unconditional checkpoint (CFG 7, 3 for the
+  last 30%). Picking it sets 20 steps; 12 and 48 steps use the template's Turbo and Quality schedules. A JSON
+  captioner, on by default, rewrites the prompt into the structured caption the model expects, using the template's
+  caption prompt on the Qwen3.5 9B encoder; without it the built-in safety filter blocks most plain prompts. The Modal
+  download step fetches it.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

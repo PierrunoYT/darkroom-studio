@@ -60,6 +60,11 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/MOSS-Image", "diffusion_models/moss_image_base_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/MOSS-Image", "text_encoders/qwen3.5_9b_bf16.safetensors"),
     ("vae", "Comfy-Org/MOSS-Image", "vae/flux2-vae_small.safetensors"),
+    # Ideogram 4, fp8, as in ComfyUI's template: a conditional and an unconditional model plus a Qwen3-VL 8B text
+    # encoder; the FLUX.2 VAE comes with FLUX 3 above (about 27 GB). Ideogram non-commercial license.
+    ("diffusion_models", "Comfy-Org/Ideogram-4", "diffusion_models/ideogram4_fp8_scaled.safetensors"),
+    ("diffusion_models", "Comfy-Org/Ideogram-4", "diffusion_models/ideogram4_unconditional_fp8_scaled.safetensors"),
+    ("text_encoders", "Comfy-Org/Ideogram-4", "text_encoders/qwen3vl_8b_fp8_scaled.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
