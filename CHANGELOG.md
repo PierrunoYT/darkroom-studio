@@ -50,6 +50,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   text encoder, the Qwen-Image VAE, AuraFlow shift 3.1 and CFGNorm, up to 3 images, 40 steps at CFG 4. When its
   Lightning LoRA is installed, the model list also has a `+ Lightning` entry that samples in 8 steps at CFG 1. The
   Modal download step fetches it, and the status line now shows the size of the developed image.
+- SD 3.5 Large and Medium (fp8, text encoders included): `sd3` checkpoints sample an SD3 latent. Picking Large sets
+  ComfyUI's template settings (1024, 20 steps, CFG 4, `euler`, `sgm_uniform`), and Medium sets the model card's 40
+  steps and CFG 4.5. The Modal download step fetches both.
+- SD 3.5 Large Turbo, following Stability's ComfyUI workflow: it loads CLIP-G, CLIP-L and T5-XXL separately, uses
+  shift 3, and picking it sets 4 steps, CFG 1, `dpmpp_2m`, `sgm_uniform`. The Modal download step fetches it from the
+  gated repo with the `huggingface` secret.
 
 ### Changed
 

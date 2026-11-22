@@ -22,6 +22,15 @@ FLUX3 = "black-forest-labs/flux-3-image-klein-comfy"
 MODELS = [
     ("checkpoints", "Comfy-Org/stable-diffusion-v1-5-archive", "v1-5-pruned-emaonly-fp16.safetensors"),
     ("checkpoints", "stabilityai/stable-diffusion-xl-base-1.0", "sd_xl_base_1.0.safetensors"),
+    # SD 3.5 Large and Medium with their text encoders, fp8 (27 GB). Stability AI Community License.
+    ("checkpoints", "Comfy-Org/stable-diffusion-3.5", "sd3.5_large_fp8_scaled.safetensors"),
+    ("checkpoints", "Comfy-Org/stable-diffusion-3.5", "sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors"),
+    # SD 3.5 Large Turbo (gated: accept the license on Hugging Face) and the text encoders it loads separately
+    # (about 27 GB), as in Stability's workflow.
+    ("checkpoints", "stabilityai/stable-diffusion-3.5-large-turbo", "sd3.5_large_turbo.safetensors"),
+    ("text_encoders", "Comfy-Org/stable-diffusion-3.5", "text_encoders/clip_g.safetensors"),
+    ("text_encoders", "Comfy-Org/stable-diffusion-3.5", "text_encoders/clip_l.safetensors"),
+    ("text_encoders", "Comfy-Org/stable-diffusion-3.5", "text_encoders/t5xxl_fp16.safetensors"),
     # Z-Image Turbo, as in ComfyUI's official template (about 19 GB)
     ("diffusion_models", "Comfy-Org/z_image_turbo", "split_files/diffusion_models/z_image_turbo_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/z_image_turbo", "split_files/text_encoders/qwen_3_4b.safetensors"),

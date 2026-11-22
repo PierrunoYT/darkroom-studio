@@ -7,7 +7,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
 
 ## Features
 
-- **txt2img and img2img** with any checkpoint ComfyUI can load (SD 1.5, SDXL, and other single-file checkpoints)
+- **txt2img and img2img** with any checkpoint ComfyUI can load (SD 1.5, SDXL, SD 3.5, and other single-file
+  checkpoints)
   and with [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo), which renders photoreal images and legible
   text in 8 steps, with [FLUX 3 Image Klein](https://bfl.ai/blog/flux-3-image-klein) from Black Forest Labs, and
   with [Qwen-Image 2.1](https://github.com/QwenLM/Qwen-Image), which is strong at typography and dense text, and
@@ -60,6 +61,22 @@ python main.py --preview-method latent2rgb
 ```
 
 Put `.safetensors` checkpoints in `ComfyUI/models/checkpoints`, then refresh models in Darkroom.
+
+For SD 3.5, download `sd3.5_large_fp8_scaled.safetensors` (Large, 15 GB) and
+`sd3.5_medium_incl_clips_t5xxlfp8scaled.safetensors` (Medium, 12 GB), both with their text encoders included, from
+[Comfy-Org/stable-diffusion-3.5](https://huggingface.co/Comfy-Org/stable-diffusion-3.5) into
+`ComfyUI/models/checkpoints`. Darkroom treats any checkpoint whose name contains `sd3` as SD 3.5 and samples the SD3
+latent. Picking Large sets ComfyUI's template settings (20 steps, CFG 4, `euler`, `sgm_uniform`); picking Medium sets
+the model card's 40 steps and CFG 4.5. SD 3.5 is under the Stability AI Community
+License, which allows commercial use below USD 1 million in annual revenue.
+
+SD 3.5 Large Turbo samples in 4 steps. Accept its license at
+[stabilityai/stable-diffusion-3.5-large-turbo](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-turbo)
+(gated, approved at once) and download `sd3.5_large_turbo.safetensors` (16 GB) into `ComfyUI/models/checkpoints`. Its
+checkpoint has no text encoders, so also download `clip_g.safetensors`, `clip_l.safetensors` and
+`t5xxl_fp16.safetensors` from the `text_encoders` folder of Comfy-Org/stable-diffusion-3.5 (11 GB) into
+`ComfyUI/models/text_encoders`. Picking it sets Stability's workflow settings: 4 steps, CFG 1, `dpmpp_2m`,
+`sgm_uniform`.
 
 For Z-Image Turbo, download the three files from
 [Comfy-Org/z_image_turbo](https://huggingface.co/Comfy-Org/z_image_turbo/tree/main/split_files) (about 19 GB) into:
@@ -196,7 +213,7 @@ uv run darkroom
 
 ## Tips
 
-- Use base resolution 512 for SD 1.5 and 1024 for SDXL and Z-Image; other sizes give duplicated subjects or blurry
+- Use base resolution 512 for SD 1.5 and 1024 for SDXL, SD 3.5 and Z-Image; other sizes give duplicated subjects or blurry
   results. Picking a model sets this for you.
 - Z-Image Turbo, the distilled FLUX 3 Klein and Qwen-Image 2.1 (base and Turbo) run at CFG 1, where the negative prompt has no effect. Describe what
   you want in the prompt instead.
@@ -226,6 +243,7 @@ uv run darkroom
 | 🔴 Cannot reach ComfyUI | ComfyUI isn't running at `COMFYUI_URL`, or the URL is wrong. |
 | New model missing on Modal | The running container predates the download. Stop it (see the Modal section). |
 | 0 models | No models in `ComfyUI/models/checkpoints` (or `diffusion_models` for Z-Image). Add one and click **Connect / refresh models**. |
+| SD 3.5 Large Turbo: value not in list | A text encoder `clip_g`, `clip_l` or `t5xxl_fp16` is missing. See the SD 3.5 files above. |
 | FireRed: value not in list | The text encoder `qwen_2.5_vl_7b_fp8_scaled.safetensors` or VAE `qwen_image_vae.safetensors` is missing. |
 | MOSS-Image: value not in list | The text encoder `qwen3.5_9b_bf16.safetensors` or VAE `flux2-vae_small.safetensors` is missing. |
 | Qwen-Image: value not in list | The text encoder `qwen3vl_8b_bf16.safetensors` or VAE `qwen_image_2.1_vae_bf16.safetensors` is missing. |

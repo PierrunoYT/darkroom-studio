@@ -45,6 +45,20 @@ def is_zimage(model: str) -> bool:
     return "z_image" in model.lower()
 
 
+# SD 3.5 Large and Medium ship as single checkpoints with their text encoders; they sample a 16-channel SD3 latent
+# (ComfyUI's template). Large Turbo's checkpoint has no text encoders, so it loads them separately (Stability's
+# workflow).
+SD3_TURBO_TEXT_ENCODERS = ("clip_g.safetensors", "clip_l.safetensors", "t5xxl_fp16.safetensors")
+
+
+def is_sd3(model: str) -> bool:
+    return "sd3" in model.lower()
+
+
+def is_sd3_turbo(model: str) -> bool:
+    return is_sd3(model) and "turbo" in model.lower()
+
+
 # FLUX 3 Image Klein, as in Black Forest Labs' ComfyUI workflows (flux-3-image-klein-comfy, MIT).
 FLUX3_TEXT_ENCODER = "qwen3vl_4b_bf16.safetensors"
 FLUX3_UPSAMPLER = "qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors"
@@ -260,7 +274,13 @@ def build_workflow(p: Params) -> dict:
         model, clip, vae, empty_latent = ["shift", 0], ["clip", 0], ["vae", 0], "EmptySD3LatentImage"
     else:
         g = {"ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": p.checkpoint}}}
-        model, clip, vae, empty_latent = ["ckpt", 0], ["ckpt", 1], ["ckpt", 2], "EmptyLatentImage"
+        model, clip, vae = ["ckpt", 0], ["ckpt", 1], ["ckpt", 2]
+        empty_latent = "EmptySD3LatentImage" if is_sd3(p.checkpoint) else "EmptyLatentImage"
+        if is_sd3_turbo(p.checkpoint):
+            g["clip"] = {"class_type": "TripleCLIPLoader", "inputs": {
+                f"clip_name{i + 1}": name for i, name in enumerate(SD3_TURBO_TEXT_ENCODERS)}}
+            g["shift"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": model, "shift": 3.0}}
+            model, clip = ["shift", 0], ["clip", 0]
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
     if is_firered(p.checkpoint):
         positive, negative = ["pos", 0], ["neg", 0]

@@ -12,7 +12,8 @@ from PIL import Image, PngImagePlugin
 from websocket import WebSocketException
 
 from darkroom.comfy import (FIRERED_MAX_IMAGES, LIGHTNING, ComfyClient, ComfyError, Params, build_workflow, can_edit,
-                            can_expand, is_firered, is_flux3, is_moss, is_qwen_image, is_qwen_turbo, is_zimage)
+                            can_expand, is_firered, is_flux3, is_moss, is_qwen_image, is_qwen_turbo, is_sd3,
+                            is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
@@ -105,6 +106,11 @@ def _preset(model: str):
     if is_zimage(model):  # ComfyUI's Z-Image Turbo and Z-Image base templates
         return (1024, 8, 1, "res_multistep", "simple") if "turbo" in model.lower() \
             else (1024, 25, 4, "res_multistep", "simple")
+    if is_sd3(model):  # Large: ComfyUI's SD 3.5 template; Medium: model card; Large Turbo: Stability's workflow
+        if "turbo" in model.lower():
+            return 1024, 4, 1, "dpmpp_2m", "sgm_uniform"
+        return (1024, 40, 4.5, "euler", "sgm_uniform") if "medium" in model.lower() \
+            else (1024, 20, 4, "euler", "sgm_uniform")
     if "xl" in model.lower():
         return 1024, 25, 7, "euler", "normal"
     return 512, 20, 7, "euler", "normal"
@@ -245,7 +251,7 @@ def build_ui() -> gr.Blocks:
                                            "before sampling. Turn off when yours already is one.")
                     aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
                     base = gr.Radio([512, 768, 1024], value=512, label="Base resolution",
-                                    info="512 for SD 1.5, 1024 for SDXL, Z-Image, FLUX 3, Qwen-Image and MOSS")
+                                    info="512 for SD 1.5, 1024 for SDXL, SD 3.5, Z-Image, FLUX 3, Qwen-Image and MOSS")
                     custom_size = gr.Checkbox(label="Custom size", value=False)
                     with gr.Row(visible=False) as custom_row:
                         width = gr.Slider(64, 2048, 512, step=64, label="Width")
