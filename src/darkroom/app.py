@@ -13,7 +13,7 @@ from websocket import WebSocketException
 
 from darkroom.comfy import (FIRERED_MAX_IMAGES, JOYAI_MAX_IMAGES, LIGHTNING, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_edit_only, is_fibo, is_joyai, is_krea, is_mage, is_ming, is_sd3,
+                            is_boogu, is_edit_only, is_fibo, is_joyai, is_krea, is_mage, is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -102,6 +102,8 @@ def _preset(model: str):
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
     if is_mage(model):  # ComfyUI's Mage-Flow templates: Turbo must run 4 steps at CFG 1
         return (1024, 4, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 30, 5, "euler", "simple")
+    if is_boogu(model):  # ComfyUI's Boogu Image 0.1 templates: Turbo text-to-image and edit
+        return (1024, 25, 3.5, "dpmpp_2m", "simple") if "edit" in model.lower() else (1024, 4, 1, "lcm", "sgm_uniform")
     if is_joyai(model):  # ComfyUI's JoyAI Image Edit template
         return 1024, 40, 4, "euler", "normal"
     if is_fibo(model):  # ComfyUI's Fibo 2.0 templates: Edit Turbo is distilled to 4 steps at CFG 1
@@ -194,7 +196,7 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
         raise gr.Error("This model only edits: drop an image in the Edit tab.")
     if edit_image is not None:
         if not can_edit(ckpt):
-            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit or FireRed Image Edit. Pick one of them, or "
+            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, Boogu Edit or FireRed Image Edit. Pick one of them, or "
                            "clear the Edit tab.")
         if init_image is not None:
             raise gr.Error("Use either the Img2img tab or the Edit tab, not both.")
@@ -296,7 +298,7 @@ def build_ui() -> gr.Blocks:
                         denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
                                             info="Lower keeps more of the init image")
                     with gr.Tab("Edit", id="edit"):
-                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit and FireRed Image Edit only. Write what to change as the prompt, "
+                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, Boogu Edit and FireRed Image Edit only. Write what to change as the prompt, "
                                     "such as *make the boat red*. The result keeps this image's shape.")
                         edit_image = gr.Image(label="Image to edit", type="pil", height=260)
                         edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,

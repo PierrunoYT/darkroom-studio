@@ -91,6 +91,10 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/JoyAI-Image-Edit", "diffusion_models/joyai_image_edit_int8_convrot.safetensors"),
     ("text_encoders", "Comfy-Org/JoyAI-Image-Edit", "text_encoders/qwen3vl_8b_joyimage_edit_int8_convrot.safetensors"),
     ("vae", "Comfy-Org/JoyAI-Image-Edit", "vae/wan_2.1_vae.safetensors"),
+    # Boogu Image 0.1 (Apache 2.0) as in ComfyUI's templates: Turbo text-to-image (fp8) and edit (int8), about 22 GB. Its
+    # text encoder is Ideogram 4's file and its VAE Z-Image's.
+    ("diffusion_models", "Comfy-Org/Boogu-Image", "diffusion_models/boogu_image_turbo_fp8_scaled.safetensors"),
+    ("diffusion_models", "Comfy-Org/Boogu-Image", "diffusion_models/boogu_image_edit_int8_convrot.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),

@@ -80,6 +80,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   VAE and enhancer are files Darkroom already has.
 - JoyAI Image Edit (JD, Apache 2.0), edit only, following ComfyUI's template: 40 steps at CFG 4 with CFGNorm on the
   Wan 2.1 VAE, with up to 6 images. The Modal download step fetches it.
+- Boogu Image 0.1 (Apache 2.0), following ComfyUI's templates: the Turbo checkpoint for text-to-image (4 LCM steps at
+  CFG 1) and the edit checkpoint for edits (25 dpmpp_2m steps at CFG 3.5). Its text encoder and VAE are files Darkroom
+  already has; the Modal download step fetches the two models.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

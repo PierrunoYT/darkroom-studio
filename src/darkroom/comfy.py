@@ -187,8 +187,22 @@ def is_joyai(model: str) -> bool:
     return "joyai" in model.lower()
 
 
+# Boogu Image 0.1 (Apache 2.0), as in ComfyUI's templates: a Turbo text-to-image checkpoint (4 LCM steps at CFG 1
+# against a zeroed negative) and an edit checkpoint (25 dpmpp_2m steps at CFG 3.5; the shift of 3.16 only shapes the
+# schedule). Its Qwen3-VL 8B encoder is Ideogram 4's file and its VAE Z-Image's.
+BOOGU_TEXT_ENCODER = IDEOGRAM_TEXT_ENCODER
+
+
+def is_boogu(model: str) -> bool:
+    return "boogu" in model.lower()
+
+
+def is_boogu_edit(model: str) -> bool:
+    return is_boogu(model) and "edit" in model.lower()
+
+
 def is_edit_only(model: str) -> bool:
-    return is_firered(model) or is_mage_edit(model) or is_joyai(model)
+    return is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model)
 
 
 # FireRed Image Edit 1.1, as in ComfyUI's template (Apache 2.0): edit only, up to 3 images. Darkroom lists it a
@@ -207,7 +221,7 @@ def is_firered(model: str) -> bool:
 def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
-            or is_joyai(model)
+            or is_joyai(model) or is_boogu_edit(model)
             or is_fibo(model))
 
 
@@ -461,6 +475,27 @@ def build_workflow(p: Params) -> dict:
                 **{f"images.image{i + 1}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], None
+    elif is_boogu(p.checkpoint):
+        if is_boogu_edit(p.checkpoint) != bool(p.edit_images):
+            raise ValueError("Boogu's edit checkpoint only edits, and its Turbo checkpoint doesn't")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": BOOGU_TEXT_ENCODER, "type": "boogu"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": ZIMAGE_VAE}},
+        }
+        if p.edit_images:
+            g["shift"] = {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["unet", 0], "shift": 3.16}}
+            g["resize"] = {"class_type": "ImageScale", "inputs": {
+                "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
+                "crop": "center"}}
+            g["text"] = {"class_type": "TextEncodeBooguEdit", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": p.prompt, "negative_prompt": p.negative,
+                **{f"images.image_{i + 1}": ["resize", 0] if i == 0 else [f"ref{i}", 0]
+                   for i in range(len(p.edit_images))}}}
+        else:
+            g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.prompt, "clip": ["clip", 0]}}
+            g["neg"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}}
+        model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyLatentImage"
     elif is_joyai(p.checkpoint):
         if not p.edit_images:
             raise ValueError("JoyAI Image Edit only edits images")
@@ -514,7 +549,8 @@ def build_workflow(p: Params) -> dict:
             g["shift"] = {"class_type": "ModelSamplingSD3", "inputs": {"model": model, "shift": 3.0}}
             model, clip = ["shift", 0], ["clip", 0]
     # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
-    if is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint):
+    if (is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint)
+            or (is_boogu(p.checkpoint) and not p.edit_images)):
         positive, negative = ["pos", 0], ["neg", 0]
     elif is_ming(p.checkpoint):
         positive, negative = ["pos", 0], None  # guided without a negative (BasicGuider)
@@ -536,7 +572,7 @@ def build_workflow(p: Params) -> dict:
             positive, negative = ["refs", 0], ["refs", 1]
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
-        elif is_ming(p.checkpoint) or is_joyai(p.checkpoint):
+        elif is_ming(p.checkpoint) or is_joyai(p.checkpoint) or is_boogu(p.checkpoint):
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
         elif is_firered(p.checkpoint):
@@ -594,6 +630,14 @@ def build_workflow(p: Params) -> dict:
         g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
             "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
             "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
+    elif is_boogu_edit(p.checkpoint):
+        # The template's sampler: the schedule comes from the shifted model, sampling from the unshifted one.
+        g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
+            "model": ["shift", 0], "scheduler": p.scheduler, "steps": p.steps, "denoise": denoise}}
+        g["sampler"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}}
+        g["sample"] = {"class_type": "SamplerCustom", "inputs": {
+            "model": model, "add_noise": True, "noise_seed": p.seed, "cfg": p.cfg, "positive": positive,
+            "negative": negative, "sampler": ["sampler", 0], "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
     elif is_qwen_turbo(p.checkpoint):
         # Fixed schedule instead of steps/scheduler; img2img keeps the low-noise tail of it.
         g["sigmas"] = {"class_type": "ManualSigmas", "inputs": {"sigmas": QWEN_TURBO_SIGMAS}}
@@ -654,13 +698,13 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

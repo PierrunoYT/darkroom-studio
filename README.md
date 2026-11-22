@@ -15,13 +15,14 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   with [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) (Apache 2.0), strong at long text and layouts, and
   with [Krea 2 Turbo](https://huggingface.co/krea/Krea-2-Turbo), an 8-step model built for aesthetic, stylized images,
   and with [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) from Bria (CC BY-NC), which generates from structured
-  scene captions
+  scene captions, and with [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) Turbo (Apache 2.0)
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
 - **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein,
   [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev),
-  [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) (Apache 2.0, edit only) and
+  [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) (Apache 2.0, edit only), Boogu Image 0.1 Edit
+  and
   [FireRed Image Edit 1.1](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1) (Apache 2.0, edit only): drop an
   image in the **Edit** tab and describe the change, such as *make it night time with rain*, optionally with more
   reference images
@@ -256,6 +257,20 @@ ComfyUI/models/vae/wan_2.1_vae.safetensors
 
 Darkroom lists any diffusion model whose name contains `joyai` and builds the graph from ComfyUI's template: 40 steps
 at CFG 4 with CFGNorm, `euler` and `normal`. It takes up to 6 images. It is slow: about 4 minutes an edit on an L40S.
+
+For [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) (Apache 2.0), download (about 22 GB) from
+[Comfy-Org/Boogu-Image](https://huggingface.co/Comfy-Org/Boogu-Image):
+
+```
+ComfyUI/models/diffusion_models/boogu_image_turbo_fp8_scaled.safetensors     (text-to-image, 4 steps)
+ComfyUI/models/diffusion_models/boogu_image_edit_int8_convrot.safetensors    (edit)
+```
+
+It also needs Ideogram 4's text encoder (`qwen3vl_8b_fp8_scaled.safetensors`, the same file as Boogu's) and Z-Image's
+`ae.safetensors` VAE. Darkroom lists any diffusion model whose name contains `boogu` and builds the graph from ComfyUI's
+templates: Turbo runs 4 `lcm` steps at CFG 1 with `sgm_uniform`; the edit checkpoint runs 25 `dpmpp_2m` steps at CFG
+3.5 with a shift of 3.16 and only edits, while Turbo only generates from text. On an L40S, Turbo takes under 30 seconds
+and an edit about 2 minutes.
 
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),
