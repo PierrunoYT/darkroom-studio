@@ -43,6 +43,9 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_turbo_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/Qwen-Image-2.1",
      "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors"),
+    # The Qwen-Image 2.1 edit prompt enhancer (about 9 GB)
+    ("text_encoders", "Comfy-Org/Qwen-Image-2.1",
+     "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors"),
     # MOSS-Image SFT and Base, bf16, with its text encoder and VAE (about 40 GB). Apache 2.0.
     ("diffusion_models", "Comfy-Org/MOSS-Image", "diffusion_models/moss_image_sft_bf16.safetensors"),
     ("diffusion_models", "Comfy-Org/MOSS-Image", "diffusion_models/moss_image_base_bf16.safetensors"),

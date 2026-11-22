@@ -112,6 +112,9 @@ Two optional extras from the same repo:
 - **Prompt enhancer** (`text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors`, 9.5 GB): tick
   **Expand prompt with the Qwen-Image enhancer** to have it rewrite your prompt first. It reasons before writing, as
   its model card recommends, which takes a few minutes per image (about 4 minutes on an L40S).
+- **Edit prompt enhancer** (`text_encoders/qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors`, 9 GB): the
+  same toggle in edit mode. It looks at the images and turns a short instruction such as *make it snowy* into a
+  detailed one that also says what to keep. An edit with it takes about 2.5 minutes on an L40S.
 
 For MOSS-Image, download from [Comfy-Org/MOSS-Image](https://huggingface.co/Comfy-Org/MOSS-Image) (about 30 GB for
 one checkpoint):
@@ -190,8 +193,8 @@ uv run darkroom
   prompt. The output keeps the image's aspect ratio at the chosen base resolution. To combine images, add them under
   **More reference images** and refer to them as `<image1>`, `<image2>`, … with Qwen-Image, or as *the first image*,
   *the second image* with FLUX 3; the image to edit is the first. Say where things go in terms of what the scene
-  holds; an instruction the scene can't satisfy, such as a wall that isn't there, gets reinterpreted. The Qwen-Image
-  prompt enhancer isn't used for edits, and Edit can't be combined with Img2img. On the L40S a 1 MP edit takes about
+  holds; an instruction the scene can't satisfy, such as a wall that isn't there, gets reinterpreted. With Qwen-Image,
+  **Expand prompt** runs its edit enhancer. Edit can't be combined with Img2img. On the L40S a 1 MP edit takes about
   20 s with Qwen-Image Turbo or FLUX 3 without the upsampler, and about 50 to 60 s with Qwen-Image base or the FLUX 3
   upsampler.
 - Turn off **Random seed** to reuse the seed shown in the status line and vary only the prompt.
@@ -219,6 +222,7 @@ src/darkroom/comfy.py    ComfyUI client (HTTP + websocket) and workflow builder
 src/darkroom/flux3_upsampler_prompt.txt  BFL's system prompt for the FLUX 3 upsampler (MIT)
 src/darkroom/flux3_edit_upsampler_prompt.txt  BFL's system prompt for the FLUX 3 upsampler in edits (MIT)
 src/darkroom/qwen_image_pe_prompt.txt    system prompt for the Qwen-Image 2.1 prompt enhancer (ComfyUI template)
+src/darkroom/qwen_image_edit_pe_prompt.txt  system prompt for the Qwen-Image 2.1 edit enhancer (ComfyUI template)
 src/darkroom/moss_image_pe_prompt.txt    system prompt for the MOSS-Image upsampler (ComfyUI template)
 modal_comfyui.py         ComfyUI on a Modal GPU
 ```

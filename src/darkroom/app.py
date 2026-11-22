@@ -185,7 +185,7 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
             edit_images=edit_names,
         )
         expanded = gr.update(visible=False)
-        if can_expand(ckpt) and upsample and not (edit_names and is_qwen_image(ckpt)):
+        if can_expand(ckpt) and upsample:
             expanded = gr.update(value="Expanding the prompt…", visible=True)
         mode = "edit" if edit_names else "img2img" if init_name else "txt2img"
         yield gr.update(), gr.update(), f"⏳ Queued {mode} · {width}×{height} · seed {seed}", seed, expanded

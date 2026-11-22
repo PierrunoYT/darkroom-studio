@@ -63,6 +63,9 @@ QWEN_TEXT_ENCODER = "qwen3vl_8b_bf16.safetensors"
 QWEN_VAE = "qwen_image_2.1_vae_bf16.safetensors"
 QWEN_ENHANCER = "qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors"
 QWEN_ENHANCER_PROMPT = files("darkroom").joinpath("qwen_image_pe_prompt.txt").read_text().strip()
+# Edits use a separate enhancer that also looks at the reference images (ComfyUI's Qwen-Image 2.1 edit template).
+QWEN_EDIT_ENHANCER = "qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors"
+QWEN_EDIT_ENHANCER_PROMPT = files("darkroom").joinpath("qwen_image_edit_pe_prompt.txt").read_text().strip()
 # The Turbo checkpoint is distilled for this fixed 8-step schedule (ComfyUI's Turbo template).
 QWEN_TURBO_SIGMAS = "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
 
@@ -105,8 +108,7 @@ def build_workflow(p: Params) -> dict:
     edit_images is set."""
     if p.edit_images and not can_edit(p.checkpoint):
         raise ValueError(f"{p.checkpoint} cannot edit images; use Qwen-Image 2.1 or FLUX 3 Klein")
-    # Qwen's enhancer is the text-to-image one; editing would need its separate i2i enhancer.
-    expand = can_expand(p.checkpoint) and p.upsample and not (p.edit_images and is_qwen_image(p.checkpoint))
+    expand = can_expand(p.checkpoint) and p.upsample
     prompt = ["upsample", 0] if expand else p.prompt
     if is_flux3(p.checkpoint):
         g = {
@@ -184,7 +186,21 @@ def build_workflow(p: Params) -> dict:
             text["resolution"] = max(256, round((p.width * p.height) ** 0.5 / 32) * 32)
             for i in range(len(p.edit_images)):
                 text[f"images.image_{i + 1}"] = [f"ref{i}", 0]
-        if expand:
+        if expand and p.edit_images:
+            # The edit enhancer sees the reference images and rewrites the instruction; the template leaves
+            # thinking off.
+            g["upsampler"] = {"class_type": "CLIPLoader",
+                              "inputs": {"clip_name": QWEN_EDIT_ENHANCER, "type": "qwen_image"}}
+            g["ref_batch"] = {"class_type": "BatchImagesNode", "inputs": {
+                f"images.image{i}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}
+            g["upsample"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["upsampler", 0], "image": ["ref_batch", 0], "system_prompt": QWEN_EDIT_ENHANCER_PROMPT,
+                "prompt": p.prompt.strip(), "max_length": 4096, "thinking": False, "use_default_template": True,
+                "mtp": "auto", "sampling_mode": "on", "sampling_mode.temperature": 1, "sampling_mode.top_k": 20,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+        elif expand:
             # Qwen's prompt enhancer rewrites the request; it is trained to reason first, so thinking stays on
             # with the token budget from its model card (a smaller one can end mid-reasoning and return nothing).
             g["upsampler"] = {"class_type": "CLIPLoader",

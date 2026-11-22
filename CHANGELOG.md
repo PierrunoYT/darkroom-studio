@@ -44,6 +44,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   image's aspect ratio at the base resolution. Qwen-Image encodes the images with its text encoder; FLUX 3 uses
   reference latents, and its upsampler uses BFL's edit system prompt and sees the images. Both use model files that
   are already downloaded.
+- Qwen-Image 2.1 edit prompt enhancer, following ComfyUI's edit template: in edit mode, Expand prompt runs the
+  i2i enhancer, which sees the images and rewrites the instruction. The Modal download step fetches it.
 
 ### Changed
 
