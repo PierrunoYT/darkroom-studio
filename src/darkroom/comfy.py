@@ -201,6 +201,16 @@ def is_boogu_edit(model: str) -> bool:
     return is_boogu(model) and "edit" in model.lower()
 
 
+# Lens (Microsoft, MIT), as in ComfyUI's templates: GPT-OSS 20B as the text encoder, a Flux-style shift and CFGNorm.
+# Base: 20 steps at CFG 5; Turbo: 4 steps at CFG 1. The templates' base resolution is 1440.
+LENS_TEXT_ENCODER = "gpt_oss_20b_nvfp4.safetensors"
+LENS_VAE = "lens_flux2-vae.safetensors"  # stored under this name; it differs from FLUX 3's file
+
+
+def is_lens(model: str) -> bool:
+    return model.lower().startswith("lens_")
+
+
 def is_edit_only(model: str) -> bool:
     return is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model)
 
@@ -475,6 +485,16 @@ def build_workflow(p: Params) -> dict:
                 **{f"images.image{i + 1}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], None
+    elif is_lens(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "shift": {"class_type": "ModelSamplingFlux", "inputs": {
+                "model": ["unet", 0], "max_shift": 1.15, "base_shift": 0.5, "width": p.width, "height": p.height}},
+            "norm": {"class_type": "CFGNorm", "inputs": {"model": ["shift", 0], "strength": 1.0, "pre_cfg": False}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": LENS_TEXT_ENCODER, "type": "lens"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": LENS_VAE}},
+        }
+        model, clip, vae, empty_latent = ["norm", 0], ["clip", 0], ["vae", 0], "EmptyLatentImage"
     elif is_boogu(p.checkpoint):
         if is_boogu_edit(p.checkpoint) != bool(p.edit_images):
             raise ValueError("Boogu's edit checkpoint only edits, and its Turbo checkpoint doesn't")
@@ -630,6 +650,14 @@ def build_workflow(p: Params) -> dict:
         g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
             "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
             "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
+    elif is_lens(p.checkpoint):
+        # The templates' sampler: the schedule comes from the shifted model, before CFGNorm.
+        g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
+            "model": ["shift", 0], "scheduler": p.scheduler, "steps": p.steps, "denoise": denoise}}
+        g["sampler"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}}
+        g["sample"] = {"class_type": "SamplerCustom", "inputs": {
+            "model": model, "add_noise": True, "noise_seed": p.seed, "cfg": p.cfg, "positive": positive,
+            "negative": negative, "sampler": ["sampler", 0], "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
     elif is_boogu_edit(p.checkpoint):
         # The template's sampler: the schedule comes from the shifted model, sampling from the unshifted one.
         g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
@@ -698,13 +726,13 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

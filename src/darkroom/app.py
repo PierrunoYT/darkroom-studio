@@ -13,7 +13,7 @@ from websocket import WebSocketException
 
 from darkroom.comfy import (FIRERED_MAX_IMAGES, JOYAI_MAX_IMAGES, LIGHTNING, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_boogu, is_edit_only, is_fibo, is_joyai, is_krea, is_mage, is_ming, is_sd3,
+                            is_boogu, is_edit_only, is_fibo, is_joyai, is_lens, is_krea, is_mage, is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -102,6 +102,8 @@ def _preset(model: str):
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
     if is_mage(model):  # ComfyUI's Mage-Flow templates: Turbo must run 4 steps at CFG 1
         return (1024, 4, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 30, 5, "euler", "simple")
+    if is_lens(model):  # ComfyUI's Lens templates (they use 1440; 1024 is faster)
+        return (1024, 4, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 20, 5, "euler", "simple")
     if is_boogu(model):  # ComfyUI's Boogu Image 0.1 templates: Turbo text-to-image and edit
         return (1024, 25, 3.5, "dpmpp_2m", "simple") if "edit" in model.lower() else (1024, 4, 1, "lcm", "sgm_uniform")
     if is_joyai(model):  # ComfyUI's JoyAI Image Edit template

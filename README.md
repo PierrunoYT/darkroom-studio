@@ -15,7 +15,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   with [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) (Apache 2.0), strong at long text and layouts, and
   with [Krea 2 Turbo](https://huggingface.co/krea/Krea-2-Turbo), an 8-step model built for aesthetic, stylized images,
   and with [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) from Bria (CC BY-NC), which generates from structured
-  scene captions, and with [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) Turbo (Apache 2.0)
+  scene captions, with [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) Turbo (Apache 2.0), and with
+  Microsoft's [Lens](https://huggingface.co/microsoft/Lens) (MIT)
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
@@ -271,6 +272,22 @@ It also needs Ideogram 4's text encoder (`qwen3vl_8b_fp8_scaled.safetensors`, th
 templates: Turbo runs 4 `lcm` steps at CFG 1 with `sgm_uniform`; the edit checkpoint runs 25 `dpmpp_2m` steps at CFG
 3.5 with a shift of 3.16 and only edits, while Turbo only generates from text. On an L40S, Turbo takes under 30 seconds
 and an edit about 2 minutes.
+
+For [Lens](https://huggingface.co/microsoft/Lens) from Microsoft (MIT), download (about 30 GB) from
+[Comfy-Org/Lens](https://huggingface.co/Comfy-Org/Lens):
+
+```
+ComfyUI/models/diffusion_models/lens_bf16.safetensors          (20 steps, CFG 5)
+ComfyUI/models/diffusion_models/lens_turbo_bf16.safetensors    (4 steps, CFG 1)
+ComfyUI/models/text_encoders/gpt_oss_20b_nvfp4.safetensors
+ComfyUI/models/vae/lens_flux2-vae.safetensors
+```
+
+The VAE is `vae/flux2-vae.safetensors` in that repo; it is a different file from FLUX 3's VAE of the same name, so save
+it as `lens_flux2-vae.safetensors`. Darkroom lists any diffusion model whose name starts with `lens_` and builds the
+graph from ComfyUI's templates: a Flux-style shift, CFGNorm, `euler` and `simple`. The templates use a 1440 base
+resolution; picking Lens sets 1024, which is faster. The NVFP4 text encoder also runs on GPUs without FP4 support, such
+as the L40S.
 
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),

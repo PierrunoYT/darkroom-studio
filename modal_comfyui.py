@@ -95,6 +95,12 @@ MODELS = [
     # text encoder is Ideogram 4's file and its VAE Z-Image's.
     ("diffusion_models", "Comfy-Org/Boogu-Image", "diffusion_models/boogu_image_turbo_fp8_scaled.safetensors"),
     ("diffusion_models", "Comfy-Org/Boogu-Image", "diffusion_models/boogu_image_edit_int8_convrot.safetensors"),
+    # Lens and Lens Turbo (Microsoft, MIT), bf16 as in ComfyUI's templates, with GPT-OSS 20B (NVFP4) as the text encoder
+    # (about 30 GB). Its FLUX.2 VAE differs from FLUX 3's file of the same name, so it is stored under its own name.
+    ("diffusion_models", "Comfy-Org/Lens", "diffusion_models/lens_bf16.safetensors"),
+    ("diffusion_models", "Comfy-Org/Lens", "diffusion_models/lens_turbo_bf16.safetensors"),
+    ("text_encoders", "Comfy-Org/Lens", "text_encoders/gpt_oss_20b_nvfp4.safetensors"),
+    ("vae", "Comfy-Org/Lens", "vae/flux2-vae.safetensors", "lens_flux2-vae.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
