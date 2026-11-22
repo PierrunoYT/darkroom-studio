@@ -18,14 +18,15 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   scene captions, with [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) Turbo (Apache 2.0), and with
   Microsoft's [Lens](https://huggingface.co/microsoft/Lens) (MIT), and with
   [HiDream O1](https://huggingface.co/HiDream-ai/HiDream-O1-Image) (MIT), which renders at about 4 MP, and with Baidu's
-  [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) (Apache 2.0)
+  [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) (Apache 2.0), and with Meituan's
+  [LongCat-Image](https://huggingface.co/meituan-longcat/LongCat-Image) (Apache 2.0)
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
 - **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein,
   [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev),
   [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) (Apache 2.0, edit only), Boogu Image 0.1 Edit,
-  HiDream O1 and
+  HiDream O1, LongCat-Image-Edit and
   [FireRed Image Edit 1.1](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1) (Apache 2.0, edit only): drop an
   image in the **Edit** tab and describe the change, such as *make it night time with rain*, optionally with more
   reference images
@@ -322,6 +323,20 @@ Its VAE, `vae/flux2-vae.safetensors` in that repo, is the same file as Lens's; s
 Darkroom lists any diffusion model whose name contains `ernie-image` and builds the graph from ComfyUI's templates.
 Its prompt enhancer, on by default as in the templates, gets the prompt and the canvas size and writes the expanded
 caption in Chinese, which ERNIE-Image reads natively.
+
+For [LongCat-Image](https://huggingface.co/meituan-longcat/LongCat-Image) from Meituan (Apache 2.0), download (about
+38 GB) from [Comfy-Org/LongCat-Image](https://huggingface.co/Comfy-Org/LongCat-Image):
+
+```
+ComfyUI/models/diffusion_models/longcat_image_bf16.safetensors              (text-to-image, 20 steps, CFG 4)
+ComfyUI/models/diffusion_models/longcat_image_edit_bf16.safetensors         (edit, 50 steps, CFG 4.5)
+ComfyUI/models/diffusion_models/longcat_image_edit_turbo_bf16.safetensors   (edit, 8 steps, CFG 1)
+```
+
+It uses FireRed's `qwen_2.5_vl_7b_fp8_scaled.safetensors` text encoder and Z-Image's `ae.safetensors` VAE. Darkroom lists
+any diffusion model whose name contains `longcat_image` and builds the graphs from ComfyUI's text-to-image and edit
+templates; Edit Turbo has no template and runs the edit graph with its model card's 8 steps at CFG 1. The edit models
+take one image and only edit; the other only generates from text. They render new text in edits poorly.
 
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),

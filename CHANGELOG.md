@@ -91,6 +91,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - ERNIE-Image and ERNIE-Image Turbo (Baidu, Apache 2.0), following ComfyUI's templates: the Ministral 3B text encoder,
   20 steps at CFG 4 or 8 at CFG 1, and the model's own prompt enhancer (on by default), which also gets the canvas
   size. The Modal download step fetches them.
+- LongCat-Image, LongCat-Image-Edit and LongCat-Image-Edit-Turbo (Meituan, Apache 2.0): text-to-image and edit
+  following ComfyUI's templates, and Edit Turbo at its model card's 8 steps and CFG 1. They reuse FireRed's text
+  encoder and Z-Image's VAE; the Modal download step fetches the three models.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

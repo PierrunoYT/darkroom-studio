@@ -237,7 +237,22 @@ def is_ernie(model: str) -> bool:
 
 
 def is_edit_only(model: str) -> bool:
-    return is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model)
+    return is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model) or is_longcat_edit(model)
+
+
+# LongCat-Image and LongCat-Image-Edit (Meituan, Apache 2.0), as in ComfyUI's templates. Both use FireRed's Qwen2.5-VL 7B
+# encoder and Z-Image's VAE. Text-to-image: CFGNorm, Flux guidance 4, 20 steps at CFG 4. Edit: one image, scaled to
+# 1 MP, Flux guidance 4.5 with indexed reference latents, 50 steps at CFG 4.5 from the encoded image. Edit Turbo has no
+# template; it runs the edit graph at 8 steps and CFG 1 (its model card).
+LONGCAT_MAX_IMAGES = 1
+
+
+def is_longcat(model: str) -> bool:
+    return "longcat_image" in model.lower()
+
+
+def is_longcat_edit(model: str) -> bool:
+    return is_longcat(model) and "edit" in model.lower()
 
 
 # FireRed Image Edit 1.1, as in ComfyUI's template (Apache 2.0): edit only, up to 3 images. Darkroom lists it a
@@ -256,7 +271,7 @@ def is_firered(model: str) -> bool:
 def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
-            or is_joyai(model) or is_boogu_edit(model) or is_hidream(model)
+            or is_joyai(model) or is_boogu_edit(model) or is_hidream(model) or is_longcat_edit(model)
             or is_fibo(model))
 
 
@@ -550,6 +565,33 @@ def build_workflow(p: Params) -> dict:
                 "json_string": ["unfence_end", 0], "key": "prompt"}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         clip, vae, empty_latent = None, ["ckpt", 2], "EmptyHiDreamO1LatentImage"
+    elif is_longcat(p.checkpoint):
+        if is_longcat_edit(p.checkpoint) != bool(p.edit_images):
+            raise ValueError("LongCat-Image-Edit only edits, and LongCat-Image only generates from text")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": FIRERED_TEXT_ENCODER, "type": "longcat_image"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": ZIMAGE_VAE}},
+        }
+        model = ["unet", 0]
+        if p.edit_images:
+            g["resize"] = {"class_type": "ImageScale", "inputs": {
+                "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
+                "crop": "center"}}
+            for key, text in (("pos", p.prompt), ("neg", p.negative)):
+                g[f"{key}_text"] = {"class_type": "TextEncodeQwenImageEdit", "inputs": {
+                    "clip": ["clip", 0], "vae": ["vae", 0], "image": ["resize", 0], "prompt": text}}
+                g[f"{key}_guided"] = {"class_type": "FluxGuidance", "inputs": {
+                    "conditioning": [f"{key}_text", 0], "guidance": 4.5}}
+                g[key] = {"class_type": "FluxKontextMultiReferenceLatentMethod", "inputs": {
+                    "conditioning": [f"{key}_guided", 0], "reference_latents_method": "index"}}
+        else:
+            g["norm"] = {"class_type": "CFGNorm", "inputs": {"model": model, "strength": 1.0, "pre_cfg": False}}
+            model = ["norm", 0]
+            for key, text in (("pos", p.prompt), ("neg", p.negative)):
+                g[f"{key}_text"] = {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": ["clip", 0]}}
+                g[key] = {"class_type": "FluxGuidance", "inputs": {"conditioning": [f"{key}_text", 0], "guidance": 4.0}}
+        clip, vae, empty_latent = None, ["vae", 0], "EmptySD3LatentImage"
     elif is_ernie(p.checkpoint):
         turbo = "turbo" in p.checkpoint.lower()
         g = {
@@ -660,7 +702,7 @@ def build_workflow(p: Params) -> dict:
     if is_hidream(p.checkpoint) and p.edit_images:
         positive, negative = ["refs", 0], ["refs", 1]
     elif (is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint)
-            or is_hidream(p.checkpoint) or is_ernie(p.checkpoint) or (is_boogu(p.checkpoint) and not p.edit_images)):
+            or is_hidream(p.checkpoint) or is_ernie(p.checkpoint) or is_longcat(p.checkpoint) or (is_boogu(p.checkpoint) and not p.edit_images)):
         positive, negative = ["pos", 0], ["neg", 0]
     elif is_ming(p.checkpoint):
         positive, negative = ["pos", 0], None  # guided without a negative (BasicGuider)
@@ -685,6 +727,9 @@ def build_workflow(p: Params) -> dict:
         elif is_ming(p.checkpoint) or is_joyai(p.checkpoint) or is_boogu(p.checkpoint) or is_hidream(p.checkpoint):
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
+        elif is_longcat(p.checkpoint):
+            g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["resize", 0], "vae": vae}}
+            g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["encode", 0], "amount": p.batch}}
         elif is_firered(p.checkpoint):
             # Sampling starts from the encoded image to edit, at full denoise (the template's latent).
             g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["resize", 0], "vae": vae}}
@@ -827,13 +872,13 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

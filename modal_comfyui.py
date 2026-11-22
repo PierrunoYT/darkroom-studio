@@ -112,6 +112,12 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/ERNIE-Image", "diffusion_models/ernie-image-turbo.safetensors"),
     ("text_encoders", "Comfy-Org/ERNIE-Image", "text_encoders/ministral-3-3b.safetensors"),
     ("text_encoders", "Comfy-Org/ERNIE-Image", "text_encoders/ernie-image-prompt-enhancer.safetensors"),
+    # LongCat-Image, LongCat-Image-Edit and Edit Turbo (Meituan, Apache 2.0), bf16 (about 38 GB). They use
+    # FireRed's Qwen2.5-VL 7B encoder and Z-Image's VAE.
+    ("diffusion_models", "Comfy-Org/LongCat-Image", "split_files/diffusion_models/longcat_image_bf16.safetensors"),
+    ("diffusion_models", "Comfy-Org/LongCat-Image", "split_files/diffusion_models/longcat_image_edit_bf16.safetensors"),
+    ("diffusion_models", "Comfy-Org/LongCat-Image",
+     "split_files/diffusion_models/longcat_image_edit_turbo_bf16.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
