@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to Darkroom are listed here.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Added
+
+- Z-Image Turbo support, following ComfyUI's official workflow: the model list includes `z_image` diffusion
+  models, which load with the Qwen 3 4B text encoder and the `ae` VAE, for txt2img and img2img.
+- Model presets: picking a model sets its recommended base resolution, steps, CFG, sampler and scheduler
+  (Z-Image Turbo: 1024, 8 steps, CFG 1, `res_multistep`, `simple`).
+- The Modal download step also fetches Z-Image Turbo into the model Volume.
+
+### Changed
+
+- The Checkpoint dropdown is now called Model.
+
+## [0.1.0] - 2026-11-22
+
+First release.
+
+### Added
+
+- Gradio studio with a dark theme: prompt and negative prompt, Develop and Stop buttons, and tabs for Image,
+  Sampler, Img2img and Connection.
+- txt2img and img2img through ComfyUI, with batches of up to 8. img2img scales and center-crops the init image
+  to the chosen size.
+- Aspect ratio presets (1:1 to 16:9) with base resolutions of 512, 768 and 1024, rounded to multiples of 64,
+  plus custom width and height.
+- Checkpoint, sampler and scheduler lists loaded from the connected ComfyUI.
+- Live progress bar and latent previews over ComfyUI's websocket.
+- Stop button that interrupts the running ComfyUI job and reports "Stopped".
+- Contact sheet with every image of the session, newest first.
+- Clear error messages when ComfyUI is unreachable, rejects a workflow, or drops the connection mid-job.
+- `COMFYUI_TOKEN` for ComfyUI servers behind an auth proxy, sent on HTTP requests and the websocket.
+- `modal_comfyui.py` to run ComfyUI on a Modal L40S GPU behind a proxy token, with SD 1.5 and SDXL base
+  checkpoints stored in a Modal Volume.

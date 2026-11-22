@@ -31,13 +31,31 @@ class Params:
     init_image: str | None = None  # name returned by ComfyClient.upload
 
 
+# Z-Image ships as separate diffusion model, text encoder and VAE files (ComfyUI's official template).
+ZIMAGE_TEXT_ENCODER = "qwen_3_4b.safetensors"
+ZIMAGE_VAE = "ae.safetensors"
+
+
+def is_zimage(model: str) -> bool:
+    return "z_image" in model.lower()
+
+
 def build_workflow(p: Params) -> dict:
     """Build a ComfyUI API-format graph for txt2img, or img2img when init_image is set."""
-    g: dict = {
-        "ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": p.checkpoint}},
-        "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": p.prompt, "clip": ["ckpt", 1]}},
-        "neg": {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": ["ckpt", 1]}},
-    }
+    if is_zimage(p.checkpoint):
+        g: dict = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "shift": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["unet", 0], "shift": 3}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": ZIMAGE_TEXT_ENCODER, "type": "lumina2"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": ZIMAGE_VAE}},
+        }
+        model, clip, vae, empty_latent = ["shift", 0], ["clip", 0], ["vae", 0], "EmptySD3LatentImage"
+    else:
+        g = {"ckpt": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": p.checkpoint}}}
+        model, clip, vae, empty_latent = ["ckpt", 0], ["ckpt", 1], ["ckpt", 2], "EmptyLatentImage"
+    # At CFG 1 (Z-Image Turbo's default) ComfyUI skips the negative prompt.
+    g["pos"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.prompt, "clip": clip}}
+    g["neg"] = {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": clip}}
     if p.init_image:
         g["load"] = {"class_type": "LoadImage", "inputs": {"image": p.init_image}}
         g["scale"] = {
@@ -45,24 +63,24 @@ def build_workflow(p: Params) -> dict:
             "inputs": {"image": ["load", 0], "upscale_method": "lanczos",
                        "width": p.width, "height": p.height, "crop": "center"},
         }
-        g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["scale", 0], "vae": ["ckpt", 2]}}
+        g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["scale", 0], "vae": vae}}
         g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["encode", 0], "amount": p.batch}}
         denoise = p.denoise
     else:
         g["latent"] = {
-            "class_type": "EmptyLatentImage",
+            "class_type": empty_latent,
             "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch},
         }
         denoise = 1.0
     g["sample"] = {
         "class_type": "KSampler",
         "inputs": {
-            "model": ["ckpt", 0], "positive": ["pos", 0], "negative": ["neg", 0],
+            "model": model, "positive": ["pos", 0], "negative": ["neg", 0],
             "latent_image": ["latent", 0], "seed": p.seed, "steps": p.steps, "cfg": p.cfg,
             "sampler_name": p.sampler, "scheduler": p.scheduler, "denoise": denoise,
         },
     }
-    g["decode"] = {"class_type": "VAEDecode", "inputs": {"samples": ["sample", 0], "vae": ["ckpt", 2]}}
+    g["decode"] = {"class_type": "VAEDecode", "inputs": {"samples": ["sample", 0], "vae": vae}}
     g["save"] = {"class_type": "SaveImage", "inputs": {"images": ["decode", 0], "filename_prefix": "Darkroom"}}
     return g
 
@@ -98,7 +116,9 @@ class ComfyClient:
         return info[1].get("options", [])
 
     def checkpoints(self) -> list[str]:
-        return self._choices("CheckpointLoaderSimple", "ckpt_name")
+        """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image)."""
+        unets = self._choices("UNETLoader", "unet_name")
+        return self._choices("CheckpointLoaderSimple", "ckpt_name") + [u for u in unets if is_zimage(u)]
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

@@ -8,7 +8,7 @@ import random
 import gradio as gr
 from websocket import WebSocketException
 
-from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow
+from darkroom.comfy import ComfyClient, ComfyError, Params, build_workflow, is_zimage
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
 MAX_SEED = 2**32 - 1
@@ -39,14 +39,14 @@ FORCE_DARK = "() => document.body.classList.add('dark')"
 
 
 def connect(url: str):
-    """Load checkpoints, samplers and schedulers from ComfyUI."""
+    """Load models, samplers and schedulers from ComfyUI."""
     client = ComfyClient(url)
     try:
         ckpts, samplers, schedulers = client.checkpoints(), client.samplers(), client.schedulers()
     except Exception as e:
         msg = f"🔴 Cannot reach ComfyUI at {url}: {e.__class__.__name__}"
         return gr.update(), gr.update(), gr.update(), msg
-    status = f"🟢 Connected to {url} · {len(ckpts)} checkpoint(s)"
+    status = f"🟢 Connected to {url} · {len(ckpts)} model(s)"
     if not ckpts:
         status += " · put a model in ComfyUI/models/checkpoints and refresh"
     return (
@@ -64,10 +64,21 @@ def size_for(aspect: str, base: int) -> tuple[int, int]:
     return max(64, round(a * scale / 64) * 64), max(64, round(b * scale / 64) * 64)
 
 
+def presets(model: str | None):
+    """Recommended base resolution, steps, CFG, sampler and scheduler for a model."""
+    if not model:
+        return (gr.update(),) * 5
+    if is_zimage(model):  # ComfyUI's Z-Image Turbo template
+        return 1024, 8, 1, "res_multistep", "simple"
+    if "xl" in model.lower():
+        return 1024, 25, 7, "euler", "normal"
+    return 512, 20, 7, "euler", "normal"
+
+
 def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_size,
              steps, cfg, sampler, scheduler, seed, randomize, batch, init_image, denoise, history):
     if not ckpt:
-        raise gr.Error("No checkpoint selected. Connect to ComfyUI and pick a model.")
+        raise gr.Error("No model selected. Connect to ComfyUI and pick one.")
     if not prompt.strip():
         raise gr.Error("Write a prompt first.")
     if not custom_size:
@@ -121,10 +132,11 @@ def build_ui() -> gr.Blocks:
                     stop_btn = gr.Button("Stop", variant="secondary", scale=1)
 
                 with gr.Tab("Image"):
-                    ckpt = gr.Dropdown(label="Checkpoint", choices=[], interactive=True)
+                    ckpt = gr.Dropdown(label="Model", choices=[], interactive=True,
+                                       info="Picking a model applies its recommended settings")
                     aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
                     base = gr.Radio([512, 768, 1024], value=512, label="Base resolution",
-                                    info="512 for SD 1.5, 1024 for SDXL / Flux")
+                                    info="512 for SD 1.5, 1024 for SDXL and Z-Image")
                     custom_size = gr.Checkbox(label="Custom size", value=False)
                     with gr.Row(visible=False) as custom_row:
                         width = gr.Slider(64, 2048, 512, step=64, label="Width")
@@ -155,6 +167,7 @@ def build_ui() -> gr.Blocks:
                 clear_btn = gr.Button("Clear contact sheet", size="sm")
 
         connect_outputs = [ckpt, sampler, scheduler, status]
+        ckpt.change(presets, ckpt, [base, steps, cfg, sampler, scheduler])
         demo.load(connect, url, connect_outputs)
         refresh_btn.click(connect, url, connect_outputs)
         custom_size.change(lambda c: gr.update(visible=c), custom_size, custom_row)
