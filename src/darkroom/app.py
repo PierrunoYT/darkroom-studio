@@ -13,7 +13,7 @@ from websocket import WebSocketException
 
 from darkroom.comfy import (FIRERED_MAX_IMAGES, JOYAI_MAX_IMAGES, LIGHTNING, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_boogu, is_edit_only, is_fibo, is_hidream, is_joyai, is_lens, is_krea, is_mage, is_ming, is_sd3,
+                            is_boogu, is_edit_only, is_ernie, is_fibo, is_hidream, is_joyai, is_lens, is_krea, is_mage, is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -89,10 +89,11 @@ def presets(model: str | None):
     name = "FLUX 3 upsampler" if is_flux3(model) else "MOSS-Image upsampler" if is_moss(model) \
         else "Ideogram JSON captioner" if is_ideogram(model) else "Ming rewriter" if is_ming(model) \
         else "Krea 2 refiner" if is_krea(model) \
-        else "Fibo 2.0 enhancer" if is_fibo(model) else "HiDream O1 refiner" if is_hidream(model) else "Qwen-Image enhancer"
+        else "Fibo 2.0 enhancer" if is_fibo(model) else "HiDream O1 refiner" if is_hidream(model) \
+        else "ERNIE-Image enhancer" if is_ernie(model) else "Qwen-Image enhancer"
     upsampler = gr.update(visible=can_expand(model),
                           value=is_flux3(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
-                          or is_krea(model) or is_fibo(model),
+                          or is_krea(model) or is_fibo(model) or is_ernie(model),
                           label=f"Expand prompt with the {name}")
     return (*_preset(model), upsampler)
 
@@ -102,6 +103,8 @@ def _preset(model: str):
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
     if is_mage(model):  # ComfyUI's Mage-Flow templates: Turbo must run 4 steps at CFG 1
         return (1024, 4, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 30, 5, "euler", "simple")
+    if is_ernie(model):  # ComfyUI's ERNIE-Image templates
+        return (1024, 8, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 20, 4, "euler", "simple")
     if is_hidream(model):  # ComfyUI's HiDream O1 templates: Dev is distilled to 28 LCM steps at CFG 1
         return (2048, 28, 1, "lcm", "normal") if "dev" in model.lower() else (2048, 40, 5, "dpmpp_2m_sde_gpu", "normal")
     if is_lens(model):  # ComfyUI's Lens templates (they use 1440; 1024 is faster)

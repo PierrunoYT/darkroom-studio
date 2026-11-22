@@ -17,7 +17,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   and with [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) from Bria (CC BY-NC), which generates from structured
   scene captions, with [Boogu Image 0.1](https://huggingface.co/Comfy-Org/Boogu-Image) Turbo (Apache 2.0), and with
   Microsoft's [Lens](https://huggingface.co/microsoft/Lens) (MIT), and with
-  [HiDream O1](https://huggingface.co/HiDream-ai/HiDream-O1-Image) (MIT), which renders at about 4 MP
+  [HiDream O1](https://huggingface.co/HiDream-ai/HiDream-O1-Image) (MIT), which renders at about 4 MP, and with Baidu's
+  [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) (Apache 2.0)
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
@@ -306,6 +307,21 @@ resolution; edits at 1024 came out as noise. The refiner (off by default, as in 
 with the template's instructions; Darkroom runs it for text-to-image only, because for edits it cannot see the image and
 rewrote the instruction into a new scene. On an L40S at 2560×1440, Dev takes about 15 seconds for an image and 35 for an
 edit; the full model about a minute.
+
+For [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) from Baidu (Apache 2.0), download (about 37 GB) from
+[Comfy-Org/ERNIE-Image](https://huggingface.co/Comfy-Org/ERNIE-Image):
+
+```
+ComfyUI/models/diffusion_models/ernie-image.safetensors                     (20 steps, CFG 4)
+ComfyUI/models/diffusion_models/ernie-image-turbo.safetensors               (8 steps, CFG 1)
+ComfyUI/models/text_encoders/ministral-3-3b.safetensors
+ComfyUI/models/text_encoders/ernie-image-prompt-enhancer.safetensors
+```
+
+Its VAE, `vae/flux2-vae.safetensors` in that repo, is the same file as Lens's; save it as `lens_flux2-vae.safetensors`.
+Darkroom lists any diffusion model whose name contains `ernie-image` and builds the graph from ComfyUI's templates.
+Its prompt enhancer, on by default as in the templates, gets the prompt and the canvas size and writes the expanded
+caption in Chinese, which ERNIE-Image reads natively.
 
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),

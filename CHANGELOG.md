@@ -88,6 +88,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - HiDream O1 full and Dev (MIT), following ComfyUI's templates, for text-to-image and editing at about 4 MP: a new
   2048 base resolution, which picking it sets. The templates' Gemma 4 E4B prompt refiner (off by default) runs for
   text-to-image. The Modal download step fetches them.
+- ERNIE-Image and ERNIE-Image Turbo (Baidu, Apache 2.0), following ComfyUI's templates: the Ministral 3B text encoder,
+  20 steps at CFG 4 or 8 at CFG 1, and the model's own prompt enhancer (on by default), which also gets the canvas
+  size. The Modal download step fetches them.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

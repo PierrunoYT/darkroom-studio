@@ -224,6 +224,18 @@ def is_hidream(model: str) -> bool:
     return "hidream_o1" in model.lower()
 
 
+# ERNIE-Image (Baidu, Apache 2.0), as in ComfyUI's templates: a Ministral 3B text encoder and the FLUX.2 VAE (Lens's
+# file). Base: 20 steps at CFG 4; Turbo: 8 steps at CFG 1 against a zeroed negative. Its own prompt enhancer, on by
+# default, gets the prompt and the canvas size in the template's chat format.
+ERNIE_TEXT_ENCODER = "ministral-3-3b.safetensors"
+ERNIE_ENHANCER = "ernie-image-prompt-enhancer.safetensors"
+ERNIE_ENHANCER_PROMPT = files("darkroom").joinpath("ernie_image_pe_prompt.txt").read_text()
+
+
+def is_ernie(model: str) -> bool:
+    return "ernie-image" in model.lower()
+
+
 def is_edit_only(model: str) -> bool:
     return is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model)
 
@@ -251,7 +263,7 @@ def can_edit(model: str) -> bool:
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
     return (is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
-            or is_krea(model) or is_fibo(model) or is_hidream(model))
+            or is_krea(model) or is_fibo(model) or is_hidream(model) or is_ernie(model))
 
 
 def _canvas(width: int, height: int) -> str:
@@ -538,6 +550,29 @@ def build_workflow(p: Params) -> dict:
                 "json_string": ["unfence_end", 0], "key": "prompt"}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         clip, vae, empty_latent = None, ["ckpt", 2], "EmptyHiDreamO1LatentImage"
+    elif is_ernie(p.checkpoint):
+        turbo = "turbo" in p.checkpoint.lower()
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": ERNIE_TEXT_ENCODER, "type": "flux2"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": LENS_VAE}},
+            "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["clip", 0]}},
+            "neg": ({"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["pos", 0]}} if turbo
+                    else {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": ["clip", 0]}}),
+        }
+        if expand:
+            # The template fills the prompt into a JSON object; Darkroom escapes it so quotes keep it valid.
+            request = (ERNIE_ENHANCER_PROMPT.replace("{prompt}", json.dumps(p.prompt.strip())[1:-1])
+                       .replace("{width}", str(p.width)).replace("{height}", str(p.height)))
+            g["enhancer"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": ERNIE_ENHANCER, "type": "flux2"}}
+            g["upsample"] = {"class_type": "TextGenerate", "inputs": {
+                "clip": ["enhancer", 0], "prompt": request, "max_length": 2048, "thinking": False,
+                "use_default_template": True,
+                "sampling_mode": "on", "sampling_mode.temperature": 0.6, "sampling_mode.top_k": 64,
+                "sampling_mode.top_p": 0.8, "sampling_mode.min_p": 0.05, "sampling_mode.repetition_penalty": 1.05,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+        model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyFlux2LatentImage"
     elif is_lens(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -625,7 +660,7 @@ def build_workflow(p: Params) -> dict:
     if is_hidream(p.checkpoint) and p.edit_images:
         positive, negative = ["refs", 0], ["refs", 1]
     elif (is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint)
-            or is_hidream(p.checkpoint) or (is_boogu(p.checkpoint) and not p.edit_images)):
+            or is_hidream(p.checkpoint) or is_ernie(p.checkpoint) or (is_boogu(p.checkpoint) and not p.edit_images)):
         positive, negative = ["pos", 0], ["neg", 0]
     elif is_ming(p.checkpoint):
         positive, negative = ["pos", 0], None  # guided without a negative (BasicGuider)
@@ -792,13 +827,13 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

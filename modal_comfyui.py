@@ -106,6 +106,12 @@ MODELS = [
     ("checkpoints", "Comfy-Org/HiDream-O1-Image", "checkpoints/hidream_o1_image_bf16.safetensors"),
     ("checkpoints", "Comfy-Org/HiDream-O1-Image", "checkpoints/hidream_o1_image_dev_fp8_scaled.safetensors"),
     ("text_encoders", "Comfy-Org/gemma-4", "text_encoders/gemma4_e4b_it_fp8_scaled.safetensors"),
+    # ERNIE-Image and ERNIE-Image Turbo (Baidu, Apache 2.0) as in ComfyUI's templates, with the Ministral 3B text encoder
+    # and the prompt enhancer (about 37 GB). Its FLUX.2 VAE is Lens's file.
+    ("diffusion_models", "Comfy-Org/ERNIE-Image", "diffusion_models/ernie-image.safetensors"),
+    ("diffusion_models", "Comfy-Org/ERNIE-Image", "diffusion_models/ernie-image-turbo.safetensors"),
+    ("text_encoders", "Comfy-Org/ERNIE-Image", "text_encoders/ministral-3-3b.safetensors"),
+    ("text_encoders", "Comfy-Org/ERNIE-Image", "text_encoders/ernie-image-prompt-enhancer.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
