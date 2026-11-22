@@ -13,11 +13,14 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   text in 8 steps, with [FLUX 3 Image Klein](https://bfl.ai/blog/flux-3-image-klein) from Black Forest Labs, and
   with [Qwen-Image 2.1](https://github.com/QwenLM/Qwen-Image), which is strong at typography and dense text, and
   with [MOSS-Image](https://github.com/OpenMOSS/MOSS-Image) (Apache 2.0), strong at long text and layouts, and
-  with [Krea 2 Turbo](https://huggingface.co/krea/Krea-2-Turbo), an 8-step model built for aesthetic, stylized images
+  with [Krea 2 Turbo](https://huggingface.co/krea/Krea-2-Turbo), an 8-step model built for aesthetic, stylized images,
+  and with [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) from Bria (CC BY-NC), which generates from structured
+  scene captions
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
-- **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein and
+- **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein,
+  [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) and
   [FireRed Image Edit 1.1](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1) (Apache 2.0, edit only): drop an
   image in the **Edit** tab and describe the change, such as *make it night time with rain*, optionally with more
   reference images
@@ -220,6 +223,26 @@ The text encoder is `text_encoders/qwen3vl_4b_fp8_scaled.safetensors` in that re
 FireRed uses. Darkroom lists any diffusion model whose name contains `krea2` and builds the graph from ComfyUI's
 template: 8 steps at CFG 1. The template's prompt refiner, run on Krea's own text encoder, is on by default; it keeps
 the scene but adds a no-text clause unless you quote the words to render.
+
+For [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev) from Bria (CC BY-NC 4.0: non-commercial use only), which
+generates from text and edits, download (about 17 GB) from [Comfy-Org/Fibo-2.0](https://huggingface.co/Comfy-Org/Fibo-2.0):
+
+```
+ComfyUI/models/diffusion_models/fibo2_dev_int8_convrot.safetensors           (50 steps, CFG 5)
+ComfyUI/models/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors    (4 steps, CFG 1)
+```
+
+It also needs Mage-Flow's text encoder (`mage_flow_qwen3vl_4b_bf16.safetensors`; Fibo's `qwen3vl_4b_bf16.safetensors` is
+the same file), FLUX 3's `flux2-vae.safetensors`, and for its prompt enhancer Ideogram 4's
+`qwen3vl_8b_fp8_scaled.safetensors` (the template uses the int8 file of the same Qwen3-VL 8B). Darkroom lists any
+diffusion model whose name contains `fibo2` and builds the graph from ComfyUI's Fibo 2.0 edit templates; without an
+image in the Edit tab the same models generate from text (ComfyUI has no local text-to-image template for Fibo yet).
+Fibo reads structured VGL captions, so the enhancer (on by default) rewrites the prompt into one: for edits with the
+template's prompt, which also looks at the images, and for text-to-image with the `generate` prompt from Bria's
+[VGL library](https://github.com/Bria-AI/vgl) (MIT) plus the template's additions. Keep it on: without it, Fibo tends
+to render words of the prompt as text in the image. In edits, describe the final result, not what to keep. Dev uses Bria's structured negative and ignores the negative prompt box;
+Turbo runs without one. Refer to several images as `<image_1>`, `<image_2>`. On an L40S, Dev takes about 2 minutes
+for an image and 4 for an edit; Turbo takes about 10 seconds, or 30 to 45 seconds with the enhancer.
 
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),

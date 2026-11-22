@@ -73,6 +73,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Krea 2 Turbo (Krea 2 Community License), following ComfyUI's template: fp8, 8 steps at CFG 1 against a zeroed
   negative, for txt2img and img2img. The template's prompt refiner runs on Krea's own Qwen3-VL 4B encoder and is on by
   default. The Modal download step fetches it.
+- Fibo 2.0 Dev and Edit Turbo (Bria, CC BY-NC 4.0) for text-to-image and editing, following ComfyUI's edit templates:
+  50 steps at CFG 5 with Bria's structured negative, or 4 steps at CFG 1. A VGL prompt enhancer, on by default, runs on
+  Ideogram 4's Qwen3-VL 8B encoder: the template's prompt for edits, which also looks at the images, and Bria's VGL
+  `generate` prompt for text-to-image. The Modal download step fetches the two models; the text encoder,
+  VAE and enhancer are files Darkroom already has.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

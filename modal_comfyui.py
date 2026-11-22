@@ -83,6 +83,10 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/Krea-2", "diffusion_models/krea2_turbo_fp8_scaled.safetensors"),
     ("text_encoders", "Comfy-Org/Krea-2", "text_encoders/qwen3vl_4b_fp8_scaled.safetensors",
      "krea2_qwen3vl_4b_fp8_scaled.safetensors"),
+    # Fibo 2.0 Dev and Edit Turbo (Bria, CC BY-NC 4.0: non-commercial), int8 as in ComfyUI's edit templates (about 17
+    # GB). Its text encoder is Mage-Flow's file, its VAE FLUX 3's, and its enhancer runs on Ideogram 4's Qwen3-VL 8B.
+    ("diffusion_models", "Comfy-Org/Fibo-2.0", "diffusion_models/fibo2_dev_int8_convrot.safetensors"),
+    ("diffusion_models", "Comfy-Org/Fibo-2.0", "diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),

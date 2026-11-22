@@ -160,6 +160,22 @@ def is_krea(model: str) -> bool:
     return "krea2" in model.lower()
 
 
+# Fibo 2.0 (Bria, CC BY-NC 4.0), as in ComfyUI's edit templates: Dev (50 steps, CFG 5) and its distilled Edit Turbo
+# (4 steps, CFG 1). The same models generate from text when no image is given. Fibo reads structured VGL captions, so an
+# enhancer rewrites the prompt into one first, on Qwen3-VL 8B (the same model as Ideogram 4's encoder file): for edits
+# the template's prompt, which also looks at the images; for text-to-image Bria's VGL "generate" prompt
+# (github.com/Bria-AI/vgl, MIT) with the template's additions. Dev's negative is Bria's VGL negative; Turbo has none.
+FIBO_TEXT_ENCODER = MAGE_TEXT_ENCODER  # the same file as Mage-Flow's
+FIBO_ENHANCER = "qwen3vl_8b_fp8_scaled.safetensors"
+FIBO_ENHANCER_PROMPT = files("darkroom").joinpath("fibo2_edit_pe_prompt.txt").read_text().strip()
+FIBO_T2I_ENHANCER_PROMPT = files("darkroom").joinpath("fibo2_t2i_pe_prompt.txt").read_text().strip()
+FIBO_DEV_NEGATIVE = files("darkroom").joinpath("fibo2_dev_negative.txt").read_text().strip()
+
+
+def is_fibo(model: str) -> bool:
+    return "fibo2" in model.lower()
+
+
 def is_edit_only(model: str) -> bool:
     return is_firered(model) or is_mage_edit(model)
 
@@ -179,13 +195,14 @@ def is_firered(model: str) -> bool:
 
 def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
-    return is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
+    return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
+            or is_fibo(model))
 
 
 def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
     return (is_flux3(model) or is_qwen_image(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
-            or is_krea(model))
+            or is_krea(model) or is_fibo(model))
 
 
 def _canvas(width: int, height: int) -> str:
@@ -403,6 +420,35 @@ def build_workflow(p: Params) -> dict:
             g[key] = {"class_type": "TextEncodeQwenImageEditPlus", "inputs": {
                 "clip": ["clip", 0], "vae": ["vae", 0], "prompt": text, **images}}
         model, clip, vae, empty_latent = ["norm", 0], None, ["vae", 0], "EmptyLatentImage"
+    elif is_fibo(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": FIBO_TEXT_ENCODER, "type": "fibo2"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": FLUX3_VAE}},
+            # Outputs positive, negative and the latent; one image is scaled and cropped to the output size.
+            # Without images it generates from text.
+            "text": {"class_type": "TextEncodeFibo2", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": prompt,
+                "negative_prompt": "" if "turbo" in p.checkpoint.lower() else FIBO_DEV_NEGATIVE,
+                "width": p.width, "height": p.height, "batch_size": 1,
+                **{f"images.image_{i + 1}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}},
+        }
+        if expand:
+            g["enhancer"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": FIBO_ENHANCER, "type": "fibo2"}}
+            g["upsample"] = {"class_type": "TextGenerateV2", "inputs": {
+                "clip": ["enhancer", 0],
+                "system_prompt": FIBO_ENHANCER_PROMPT if p.edit_images else FIBO_T2I_ENHANCER_PROMPT,
+                # Bria's request wording for text-to-image; edits pass the instruction as the template does.
+                "prompt": p.prompt.strip() if p.edit_images else (
+                    "Generate a detailed JSON object, adhering to the expected schema, for an imagined scene based on "
+                    f"the following request: {p.prompt.strip()}."), "max_length": 3000, "thinking": False,
+                "use_default_template": True, "mtp": "auto",
+                "sampling_mode": "on", "sampling_mode.temperature": 0.3, "sampling_mode.top_k": 20,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0.05, "sampling_mode.repetition_penalty": 1.05,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed,
+                **{f"images.image{i + 1}": [f"ref{i}", 0] for i in range(len(p.edit_images))}}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+        model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], None
     elif is_krea(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -480,7 +526,7 @@ def build_workflow(p: Params) -> dict:
         g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["scale", 0], "vae": vae}}
         g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["encode", 0], "amount": p.batch}}
         denoise = p.denoise
-    elif is_mage(p.checkpoint):
+    elif is_mage(p.checkpoint) or is_fibo(p.checkpoint):
         g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["text", 2], "amount": p.batch}}
         denoise = 1.0
     else:
@@ -578,13 +624,13 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")
