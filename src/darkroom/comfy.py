@@ -65,7 +65,7 @@ IDEOGRAM_TEXT_ENCODER = "qwen3vl_8b_fp8_scaled.safetensors"
 # Ideogram 4 is trained on structured JSON captions, and its built-in safety filter blocks most plain prompts. The
 # template's caption prompt turns an idea into that JSON; Darkroom runs it on MOSS-Image's Qwen3.5 9B encoder. Darkroom
 # adds one rule to it: no transparent background unless the idea asks for one (it sometimes picked one unprompted).
-IDEOGRAM_UPSAMPLER_PROMPT = files("darkroom").joinpath("ideogram4_pe_prompt.txt").read_text().strip()
+IDEOGRAM_UPSAMPLER_PROMPT = files("darkroom").joinpath("ideogram4_pe_prompt.txt").read_text(encoding="utf-8").strip()
 
 
 def is_ideogram(model: str) -> bool:
@@ -84,8 +84,8 @@ FLUX3_TEXT_ENCODER = "qwen3vl_4b_bf16.safetensors"
 FLUX3_UPSAMPLER = "qwen3.5_9b_flux3_prompt_upsampler_bf16.safetensors"
 FLUX3_VAE = "flux2-vae.safetensors"
 FLUX3_SHIFT = math.log(16)  # the workflows' timestep shift: mu = ln(alpha), alpha = 16
-FLUX3_SYSTEM_PROMPT = files("darkroom").joinpath("flux3_upsampler_prompt.txt").read_text().strip()
-FLUX3_EDIT_SYSTEM_PROMPT = files("darkroom").joinpath("flux3_edit_upsampler_prompt.txt").read_text().strip()
+FLUX3_SYSTEM_PROMPT = files("darkroom").joinpath("flux3_upsampler_prompt.txt").read_text(encoding="utf-8").strip()
+FLUX3_EDIT_SYSTEM_PROMPT = files("darkroom").joinpath("flux3_edit_upsampler_prompt.txt").read_text(encoding="utf-8").strip()
 
 
 def is_flux3(model: str) -> bool:
@@ -96,10 +96,10 @@ def is_flux3(model: str) -> bool:
 QWEN_TEXT_ENCODER = "qwen3vl_8b_bf16.safetensors"
 QWEN_VAE = "qwen_image_2.1_vae_bf16.safetensors"
 QWEN_ENHANCER = "qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors"
-QWEN_ENHANCER_PROMPT = files("darkroom").joinpath("qwen_image_pe_prompt.txt").read_text().strip()
+QWEN_ENHANCER_PROMPT = files("darkroom").joinpath("qwen_image_pe_prompt.txt").read_text(encoding="utf-8").strip()
 # Edits use a separate enhancer that also looks at the reference images (ComfyUI's Qwen-Image 2.1 edit template).
 QWEN_EDIT_ENHANCER = "qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors"
-QWEN_EDIT_ENHANCER_PROMPT = files("darkroom").joinpath("qwen_image_edit_pe_prompt.txt").read_text().strip()
+QWEN_EDIT_ENHANCER_PROMPT = files("darkroom").joinpath("qwen_image_edit_pe_prompt.txt").read_text(encoding="utf-8").strip()
 # The Turbo checkpoint is distilled for this fixed 8-step schedule (ComfyUI's Turbo template).
 QWEN_TURBO_SIGMAS = "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
 
@@ -115,7 +115,7 @@ def is_qwen_turbo(model: str) -> bool:
 # MOSS-Image, as in ComfyUI's official templates (Apache 2.0). Its text encoder also runs the prompt upsampler.
 MOSS_TEXT_ENCODER = "qwen3.5_9b_bf16.safetensors"
 MOSS_VAE = "flux2-vae_small.safetensors"
-MOSS_UPSAMPLER_PROMPT = files("darkroom").joinpath("moss_image_pe_prompt.txt").read_text().strip()
+MOSS_UPSAMPLER_PROMPT = files("darkroom").joinpath("moss_image_pe_prompt.txt").read_text(encoding="utf-8").strip()
 
 
 def is_moss(model: str) -> bool:
@@ -137,7 +137,7 @@ def is_moss_edit(model: str) -> bool:
 # a second on an L40S, so Darkroom runs it on MOSS-Image's Qwen3.5 9B. Edits take up to 8 images and sample with LCM.
 MING_TEXT_ENCODER = "ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors"
 MING_VAE = "ming_image_vae_bf16.safetensors"
-MING_ENHANCER_PROMPT = files("darkroom").joinpath("ming_image_pe_prompt.txt").read_text().strip()
+MING_ENHANCER_PROMPT = files("darkroom").joinpath("ming_image_pe_prompt.txt").read_text(encoding="utf-8").strip()
 MING_MAX_IMAGES = 8
 
 
@@ -164,7 +164,7 @@ def is_mage_edit(model: str) -> bool:
 # Raw, the undistilled model, runs the same graph at its model card's 52 steps and CFG 3.5 with a real negative.
 # Its own text encoder refines the prompt first (on by default), with the template's instructions in front of it.
 KREA_TEXT_ENCODER = "krea2_qwen3vl_4b_fp8_scaled.safetensors"  # stored under this name, as Mage-Flow's
-KREA_REFINER_PROMPT = files("darkroom").joinpath("krea2_pe_prompt.txt").read_text().strip()
+KREA_REFINER_PROMPT = files("darkroom").joinpath("krea2_pe_prompt.txt").read_text(encoding="utf-8").strip()
 
 
 def is_krea(model: str) -> bool:
@@ -178,9 +178,9 @@ def is_krea(model: str) -> bool:
 # (github.com/Bria-AI/vgl, MIT) with the template's additions. Dev's negative is Bria's VGL negative; Turbo has none.
 FIBO_TEXT_ENCODER = MAGE_TEXT_ENCODER  # the same file as Mage-Flow's
 FIBO_ENHANCER = "qwen3vl_8b_fp8_scaled.safetensors"
-FIBO_ENHANCER_PROMPT = files("darkroom").joinpath("fibo2_edit_pe_prompt.txt").read_text().strip()
-FIBO_T2I_ENHANCER_PROMPT = files("darkroom").joinpath("fibo2_t2i_pe_prompt.txt").read_text().strip()
-FIBO_DEV_NEGATIVE = files("darkroom").joinpath("fibo2_dev_negative.txt").read_text().strip()
+FIBO_ENHANCER_PROMPT = files("darkroom").joinpath("fibo2_edit_pe_prompt.txt").read_text(encoding="utf-8").strip()
+FIBO_T2I_ENHANCER_PROMPT = files("darkroom").joinpath("fibo2_t2i_pe_prompt.txt").read_text(encoding="utf-8").strip()
+FIBO_DEV_NEGATIVE = files("darkroom").joinpath("fibo2_dev_negative.txt").read_text(encoding="utf-8").strip()
 
 
 def is_fibo(model: str) -> bool:
@@ -229,7 +229,7 @@ def is_lens(model: str) -> bool:
 # refiner runs Gemma 4 E4B with the template's instructions and chat format. Darkroom runs it for text-to-image only: the
 # template's raw chat prompt has no place for the image, so for edits it rewrote the instruction into a new scene.
 HIDREAM_REFINER = "gemma4_e4b_it_fp8_scaled.safetensors"
-HIDREAM_REFINER_PROMPT = files("darkroom").joinpath("hidream_o1_pe_prompt.txt").read_text()
+HIDREAM_REFINER_PROMPT = files("darkroom").joinpath("hidream_o1_pe_prompt.txt").read_text(encoding="utf-8")
 
 
 def is_hidream(model: str) -> bool:
@@ -241,7 +241,7 @@ def is_hidream(model: str) -> bool:
 # default, gets the prompt and the canvas size in the template's chat format.
 ERNIE_TEXT_ENCODER = "ministral-3-3b.safetensors"
 ERNIE_ENHANCER = "ernie-image-prompt-enhancer.safetensors"
-ERNIE_ENHANCER_PROMPT = files("darkroom").joinpath("ernie_image_pe_prompt.txt").read_text()
+ERNIE_ENHANCER_PROMPT = files("darkroom").joinpath("ernie_image_pe_prompt.txt").read_text(encoding="utf-8")
 
 
 def is_ernie(model: str) -> bool:
@@ -255,9 +255,9 @@ def is_ernie(model: str) -> bool:
 MINIMAX_H3_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
 MINIMAX_H3_VAE = "minimax_h3_image_vae_fp16.safetensors"
 MINIMAX_H3_ENHANCER = "qwen3.5_9b_w4a8_gptq.safetensors"
-MINIMAX_H3_SYSTEM_PROMPT = files("darkroom").joinpath("minimax_h3_system_prompt.txt").read_text().strip()
-MINIMAX_H3_T2I_PROMPT = files("darkroom").joinpath("minimax_h3_t2i_pe_prompt.txt").read_text()
-MINIMAX_H3_EDIT_PROMPT = files("darkroom").joinpath("minimax_h3_edit_pe_prompt.txt").read_text()
+MINIMAX_H3_SYSTEM_PROMPT = files("darkroom").joinpath("minimax_h3_system_prompt.txt").read_text(encoding="utf-8").strip()
+MINIMAX_H3_T2I_PROMPT = files("darkroom").joinpath("minimax_h3_t2i_pe_prompt.txt").read_text(encoding="utf-8")
+MINIMAX_H3_EDIT_PROMPT = files("darkroom").joinpath("minimax_h3_edit_pe_prompt.txt").read_text(encoding="utf-8")
 
 
 def is_minimax_h3(model: str) -> bool:

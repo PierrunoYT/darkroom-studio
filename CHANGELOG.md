@@ -136,6 +136,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The contact sheet now shows each image's seed and prompt as a caption.
 - Mixed wide and tall images left large gaps in the contact sheet; it now stacks thumbnails in three masonry
   columns.
+- Darkroom crashed on startup on Windows with a `UnicodeDecodeError`: the bundled prompt files are now read as UTF-8
+  instead of the system code page.
 
 ### Changed
 
