@@ -284,6 +284,15 @@ def is_kandinsky(model: str) -> bool:
     return "kandinsky5lite_t2i" in model.lower()
 
 
+# PixelDiT 1.3B (NVIDIA, NSCL v1: non-commercial), as in ComfyUI's template: it samples in pixel space, so there is no
+# VAE ("pixel_space"); a Gemma 2 2B text encoder, 30 er_sde steps at CFG 4.
+PIXELDIT_TEXT_ENCODER = "gemma_2_2b_it_elm_bf16.safetensors"
+
+
+def is_pixeldit(model: str) -> bool:
+    return model.lower().startswith("pixeldit_")
+
+
 def is_edit_only(model: str) -> bool:
     return (is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model) or is_longcat_edit(model)
             or is_moss_edit(model))
@@ -796,6 +805,13 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyLatentImage"
+    elif is_pixeldit(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": PIXELDIT_TEXT_ENCODER, "type": "pixeldit"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": "pixel_space"}},
+        }
+        model, clip, vae, empty_latent = ["unet", 0], ["clip", 0], ["vae", 0], "EmptyChromaRadianceLatentImage"
     elif is_kandinsky(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -1011,7 +1027,7 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, Anima, Kandinsky 5, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, Anima, Kandinsky 5, PixelDiT, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
@@ -1019,7 +1035,7 @@ class ComfyClient:
             unets = unets + [u + MOSS_EDIT for u in unets if is_moss(u) and "sft" in u.lower()]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_anima(u) or is_kandinsky(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

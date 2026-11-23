@@ -102,6 +102,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   FireRed's VAE; the Modal download step fetches the models and the Qwen3 0.6B text encoder.
 - Kandinsky 5.0 Image Lite SFT and pretrain (MIT), following ComfyUI's template: 50 steps at CFG 3.5 with img2img. It
   reuses FireRed's Qwen2.5-VL encoder, SD 3.5's CLIP-L and Z-Image's VAE; the Modal download step fetches the models.
+- PixelDiT 1.3B (NVIDIA, non-commercial), a pixel-space model with no VAE, following ComfyUI's template: 30 er_sde
+  steps at CFG 4 with img2img. The Modal download step fetches it and its Gemma 2 2B text encoder.
 - MiniMax-H3-Image (untested), following ComfyUI's templates: text-to-image and editing with `<Picture N>`
   references, 6 steps at CFG 1 at about 4 MP, and its Qwen3.5 9B prompt enhancer (on by default). Its license excludes
   the EU, UK, South Korea and the US, so it runs on its own Modal app, `modal_h3.py`, pinned to GPUs in Japan or Canada.

@@ -383,6 +383,19 @@ Z-Image's `ae.safetensors` VAE. Darkroom lists any diffusion model whose name co
 the graph from ComfyUI's template; img2img works too. ComfyUI cannot run the I2I (edit) checkpoint, so Darkroom leaves
 it out.
 
+For [PixelDiT](https://huggingface.co/nvidia/PixelDiT-1300M-1024px) from NVIDIA (NSCL v1: non-commercial), a 1.3B
+model that samples pixels directly with no VAE, download (about 8 GB) from
+[Comfy-Org/PixelDiT](https://huggingface.co/Comfy-Org/PixelDiT):
+
+```
+ComfyUI/models/diffusion_models/pixeldit_1300m_1024px_bf16.safetensors   (30 er_sde steps, CFG 4)
+ComfyUI/models/text_encoders/gemma_2_2b_it_elm_bf16.safetensors
+```
+
+Darkroom lists any diffusion model whose name starts with `pixeldit_` and builds the graph from ComfyUI's template;
+img2img works too. It renders text poorly. The `pid_*` files in that repo are PiD decoders that upscale other models'
+latents to 4K, not image models, so Darkroom does not list them.
+
 For [MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image), text-to-image and edit in one model,
 **check its license first**: it excludes the EU, the UK, South Korea and the United States, including using or
 displaying its outputs there. Download (about 55 GB) from that repo, [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3)

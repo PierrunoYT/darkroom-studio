@@ -134,6 +134,10 @@ MODELS = [
     # CLIP-L and Z-Image's VAE.
     ("diffusion_models", "kandinskylab/Kandinsky-5.0-T2I-Lite", "model/kandinsky5lite_t2i.safetensors"),
     ("diffusion_models", "kandinskylab/Kandinsky-5.0-T2I-Lite-pretrain", "model/kandinsky5lite_t2i_pretrain.safetensors"),
+    # PixelDiT 1.3B (NVIDIA, NSCL v1: non-commercial), a pixel-space model with no VAE, and its Gemma 2 2B encoder (about
+    # 8 GB), as in ComfyUI's template.
+    ("diffusion_models", "Comfy-Org/PixelDiT", "diffusion_models/pixeldit_1300m_1024px_bf16.safetensors"),
+    ("text_encoders", "Comfy-Org/PixelDiT", "text_encoders/gemma_2_2b_it_elm_bf16.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
