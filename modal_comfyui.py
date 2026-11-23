@@ -138,6 +138,9 @@ MODELS = [
     # 8 GB), as in ComfyUI's template.
     ("diffusion_models", "Comfy-Org/PixelDiT", "diffusion_models/pixeldit_1300m_1024px_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/PixelDiT", "text_encoders/gemma_2_2b_it_elm_bf16.safetensors"),
+    # OmniGen2 (Apache 2.0) with its Qwen2.5-VL 3B encoder, as in ComfyUI's templates (about 15 GB). Its VAE is Z-Image's.
+    ("diffusion_models", "Comfy-Org/Omnigen2_ComfyUI_repackaged", "split_files/diffusion_models/omnigen2_fp16.safetensors"),
+    ("text_encoders", "Comfy-Org/Omnigen2_ComfyUI_repackaged", "split_files/text_encoders/qwen_2.5_vl_fp16.safetensors"),
     # ChronoEdit 14B (NVIDIA Open Model License) and its distill LoRA, as in ComfyUI's template, with Wan 2.1's UMT5-XXL
     # encoder and CLIP Vision H (about 41 GB). Its Wan 2.1 VAE is JoyAI's file. Edit only.
     ("diffusion_models", "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",

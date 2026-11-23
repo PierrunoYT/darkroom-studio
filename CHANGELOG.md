@@ -98,6 +98,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   that renders a 5-frame clip from the image and keeps the last frame, 20 uni_pc steps at CFG 4, or its distill LoRA,
   listed as `+ Distill LoRA`, at NVIDIA's 8 steps, CFG 1 and shift 2. It reuses JoyAI's Wan 2.1 VAE; the Modal download
   step fetches the rest.
+- OmniGen2 (Apache 2.0), following ComfyUI's templates: text-to-image, img2img and editing with up to 3 images, 20
+  steps with a dual guider (CFG 5 on the prompt, 2 on the images). It reuses Z-Image's VAE; the Modal download step
+  fetches the model and its Qwen2.5-VL 3B text encoder.
 - Missing variants of models Darkroom already had: Krea 2 Raw (52 steps at CFG 3.5), Boogu Base (30 steps at CFG 4)
   and Boogu Edit Turbo (the 1K hotfix, 4 steps at CFG 1), from their model cards; and MOSS-Image's edit LoRA, listed as
   the SFT checkpoint `+ Edit LoRA`, following ComfyUI's edit template. The Modal download step fetches them.

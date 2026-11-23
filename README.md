@@ -19,14 +19,15 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   Microsoft's [Lens](https://huggingface.co/microsoft/Lens) (MIT), and with
   [HiDream O1](https://huggingface.co/HiDream-ai/HiDream-O1-Image) (MIT), which renders at about 4 MP, and with Baidu's
   [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) (Apache 2.0), and with Meituan's
-  [LongCat-Image](https://huggingface.co/meituan-longcat/LongCat-Image) (Apache 2.0)
+  [LongCat-Image](https://huggingface.co/meituan-longcat/LongCat-Image) (Apache 2.0), and with
+  [OmniGen2](https://huggingface.co/OmniGen2/OmniGen2) (Apache 2.0)
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
 - **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein,
   [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev),
   [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) (Apache 2.0, edit only), Boogu Image 0.1 Edit,
-  HiDream O1, LongCat-Image-Edit, NVIDIA's [ChronoEdit](https://huggingface.co/nvidia/ChronoEdit-14B-Diffusers)
+  HiDream O1, LongCat-Image-Edit, OmniGen2, NVIDIA's [ChronoEdit](https://huggingface.co/nvidia/ChronoEdit-14B-Diffusers)
   (NVIDIA Open Model License, edit only) and
   [FireRed Image Edit 1.1](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1) (Apache 2.0, edit only): drop an
   image in the **Edit** tab and describe the change, such as *make it night time with rain*, optionally with more
@@ -372,6 +373,18 @@ distill LoRA runs at NVIDIA's settings (shift 2, 8 steps), since the template's 
 needs a full description of the result, as in the template, and mostly ignores short instructions such as *put it in a
 glass of water*, which the full model follows. On an L40S at 1024×1024, a batch of two edits took about 2¾ minutes, or
 under one with the LoRA, including loading the model.
+
+For [OmniGen2](https://huggingface.co/OmniGen2/OmniGen2) (Apache 2.0), which generates and edits, download (about
+15 GB) from [Comfy-Org/Omnigen2_ComfyUI_repackaged](https://huggingface.co/Comfy-Org/Omnigen2_ComfyUI_repackaged):
+
+```
+ComfyUI/models/diffusion_models/omnigen2_fp16.safetensors                   (20 steps, CFG 5)
+ComfyUI/models/text_encoders/qwen_2.5_vl_fp16.safetensors
+```
+
+Its VAE is Z-Image's `ae.safetensors`. Darkroom lists any diffusion model whose name contains `omnigen2` and builds the
+graphs from ComfyUI's text-to-image and edit templates: a dual guider weighs the prompt at the CFG scale and the images
+at 2. It edits with up to 3 images. Edits follow the instruction but often redraw the background.
 
 For [Anima](https://huggingface.co/circlestone-labs/Anima), an anime and illustration model from CircleStone Labs
 and Comfy Org (non-commercial license; the images you make may be used commercially), download (about 14 GB) from

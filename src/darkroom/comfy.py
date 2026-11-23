@@ -309,6 +309,17 @@ def is_ph3(model: str) -> bool:
     return model.lower().startswith(("p-h3-image_", "p-image-oss_"))
 
 
+# OmniGen2 (Apache 2.0), as in ComfyUI's templates: one model for text-to-image and editing, with a Qwen2.5-VL 3B text
+# encoder and Z-Image's VAE. A dual guider: CFG 5 on the prompt, 2 on the images. Each image is encoded and attached to
+# both prompts as a reference latent; the first is scaled to the output size, the others to 1 MP. 20 steps.
+OMNIGEN_TEXT_ENCODER = "qwen_2.5_vl_fp16.safetensors"
+OMNIGEN_MAX_IMAGES = 3
+
+
+def is_omnigen(model: str) -> bool:
+    return "omnigen2" in model.lower()
+
+
 def is_edit_only(model: str) -> bool:
     return (is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model) or is_longcat_edit(model)
             or is_moss_edit(model) or is_chrono(model))
@@ -363,7 +374,7 @@ def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
             or is_joyai(model) or is_boogu_edit(model) or is_hidream(model) or is_longcat_edit(model)
-            or is_moss_edit(model) or is_minimax_h3(model) or is_ph3(model) or is_chrono(model)
+            or is_moss_edit(model) or is_minimax_h3(model) or is_ph3(model) or is_chrono(model) or is_omnigen(model)
             or is_fibo(model))
 
 
@@ -682,6 +693,27 @@ def build_workflow(p: Params) -> dict:
                 "json_string": ["unfence_end", 0], "key": "prompt"}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         clip, vae, empty_latent = None, ["ckpt", 2], "EmptyHiDreamO1LatentImage"
+    elif is_omnigen(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": OMNIGEN_TEXT_ENCODER, "type": "omnigen2"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": ZIMAGE_VAE}},
+            "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": p.prompt, "clip": ["clip", 0]}},
+            "neg": {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": ["clip", 0]}},
+        }
+        omni_pos, omni_neg = ["pos", 0], ["neg", 0]
+        for i in range(len(p.edit_images)):
+            g[f"scale{i}"] = ({"class_type": "ImageScale", "inputs": {
+                "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
+                "crop": "center"}} if i == 0 else {"class_type": "ImageScaleToTotalPixels", "inputs": {
+                    "image": [f"ref{i}", 0], "upscale_method": "area", "megapixels": 1.0, "resolution_steps": 1}})
+            g[f"ref_latent{i}"] = {"class_type": "VAEEncode", "inputs": {"pixels": [f"scale{i}", 0], "vae": ["vae", 0]}}
+            g[f"pos_ref{i}"] = {"class_type": "ReferenceLatent", "inputs": {
+                "conditioning": omni_pos, "latent": [f"ref_latent{i}", 0]}}
+            g[f"neg_ref{i}"] = {"class_type": "ReferenceLatent", "inputs": {
+                "conditioning": omni_neg, "latent": [f"ref_latent{i}", 0]}}
+            omni_pos, omni_neg = [f"pos_ref{i}", 0], [f"neg_ref{i}", 0]
+        model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptySD3LatentImage"
     elif is_chrono(p.checkpoint):
         if not p.edit_images:
             raise ValueError("ChronoEdit only edits images")
@@ -943,6 +975,8 @@ def build_workflow(p: Params) -> dict:
         positive, negative = ["refs", 0], ["refs", 1]
     elif is_moss_edit(p.checkpoint):
         positive, negative = ["pos", 0], ["neg", 0]
+    elif is_omnigen(p.checkpoint):
+        positive, negative = omni_pos, omni_neg  # the guider also takes the plain negative
     elif is_chrono(p.checkpoint):
         positive, negative = ["i2v", 0], ["i2v", 1]
     elif is_minimax_h3(p.checkpoint):
@@ -975,7 +1009,7 @@ def build_workflow(p: Params) -> dict:
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
         elif (is_ming(p.checkpoint) or is_joyai(p.checkpoint) or is_boogu(p.checkpoint) or is_hidream(p.checkpoint)
-              or is_moss_edit(p.checkpoint)):
+              or is_moss_edit(p.checkpoint) or is_omnigen(p.checkpoint)):
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
         elif is_chrono(p.checkpoint):
@@ -1037,6 +1071,18 @@ def build_workflow(p: Params) -> dict:
         g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
             "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
             "sigmas": ["sigmas", 0], "latent_image": ["text", 1]}}
+    elif is_omnigen(p.checkpoint):
+        # The templates' guider: the prompt against the images (CFG), and the images against the plain negative (2).
+        g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
+            "model": model, "scheduler": p.scheduler, "steps": p.steps, "denoise": denoise}}
+        g["noise"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": p.seed}}
+        g["guider"] = {"class_type": "DualCFGGuider", "inputs": {
+            "model": model, "cond1": positive, "cond2": negative, "negative": ["neg", 0], "cfg_conds": p.cfg,
+            "cfg_cond2_negative": 2.0, "style": "regular"}}
+        g["sampler"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}}
+        g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
+            "sigmas": ["sigmas", 0], "latent_image": ["latent", 0]}}
     elif is_ming(p.checkpoint):
         # The templates' sampler: no CFG; edits use LCM with slightly raised noise.
         g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
@@ -1144,7 +1190,7 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, ChronoEdit, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, ChronoEdit, OmniGen2, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         loras = self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if FIRERED_LORA in loras else [u])]
@@ -1154,7 +1200,7 @@ class ComfyClient:
             unets = unets + [u + MOSS_EDIT for u in unets if is_moss(u) and "sft" in u.lower()]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or (is_ideogram(u) and "unconditional" not in u)] + chrono + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or is_omnigen(u) or (is_ideogram(u) and "unconditional" not in u)] + chrono + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")
