@@ -21,7 +21,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) (Apache 2.0), and with Meituan's
   [LongCat-Image](https://huggingface.co/meituan-longcat/LongCat-Image) (Apache 2.0), and with
   [OmniGen2](https://huggingface.co/OmniGen2/OmniGen2) (Apache 2.0), and with
-  [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD) and Radiance (Apache 2.0), FLUX-based models
+  [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD) and Radiance (Apache 2.0), FLUX-based models, and with
+  [Ovis-Image](https://huggingface.co/ATH-MaaS/Ovis-Image-7B) (Apache 2.0), a 7B model that renders text well
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
@@ -401,6 +402,18 @@ They use SD 3.5 Large Turbo's `t5xxl_fp16.safetensors` text encoder; HD uses Z-I
 Radiance renders in pixel space without one. Darkroom lists any diffusion model whose name contains `chroma` and builds
 the graphs from ComfyUI's templates. Radiance samples on the template's own beta schedule, so the scheduler setting does
 not apply to it. Both work best with long, descriptive prompts; the templates' negatives describe flaws in sentences.
+
+For [Ovis-Image 7B](https://huggingface.co/ATH-MaaS/Ovis-Image-7B) (Apache 2.0), download (about 20 GB) from
+[Comfy-Org/Ovis-Image](https://huggingface.co/Comfy-Org/Ovis-Image):
+
+```
+ComfyUI/models/diffusion_models/ovis_image_bf16.safetensors                 (20 steps, CFG 5)
+ComfyUI/models/text_encoders/ovis_2.5.safetensors
+```
+
+Its VAE is Z-Image's `ae.safetensors`. Darkroom lists any diffusion model whose name contains `ovis_image` and builds
+the graph from ComfyUI's template, with an AuraFlow shift of 3. In a test poster it spelled the headline and a
+subtitle exactly but printed the subtitle twice. On an L40S an image takes about 17 seconds once the model is loaded.
 
 For [Anima](https://huggingface.co/circlestone-labs/Anima), an anime and illustration model from CircleStone Labs
 and Comfy Org (non-commercial license; the images you make may be used commercially), download (about 14 GB) from

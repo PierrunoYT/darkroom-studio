@@ -138,6 +138,10 @@ MODELS = [
     # 8 GB), as in ComfyUI's template.
     ("diffusion_models", "Comfy-Org/PixelDiT", "diffusion_models/pixeldit_1300m_1024px_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/PixelDiT", "text_encoders/gemma_2_2b_it_elm_bf16.safetensors"),
+    # Ovis-Image 7B (Apache 2.0) with its Ovis 2.5 text encoder, as in ComfyUI's template (about 20 GB). Its VAE is
+    # Z-Image's.
+    ("diffusion_models", "Comfy-Org/Ovis-Image", "split_files/diffusion_models/ovis_image_bf16.safetensors"),
+    ("text_encoders", "Comfy-Org/Ovis-Image", "split_files/text_encoders/ovis_2.5.safetensors"),
     # Chroma1-HD (fp8) and Chroma1-Radiance (lodestones, Apache 2.0), as in ComfyUI's templates (about 28 GB). They use
     # SD 3.5 Large Turbo's T5-XXL encoder; HD uses Z-Image's VAE and Radiance none.
     ("diffusion_models", "Comfy-Org/Chroma1-HD_repackaged", "split_files/diffusion_models/Chroma1-HD-fp8mixed.safetensors"),

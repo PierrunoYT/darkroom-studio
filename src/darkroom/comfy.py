@@ -309,6 +309,15 @@ def is_ph3(model: str) -> bool:
     return model.lower().startswith(("p-h3-image_", "p-image-oss_"))
 
 
+# Ovis-Image 7B (Apache 2.0), as in ComfyUI's template: a text-to-image model strong at rendering text, with the Ovis 2.5
+# text encoder and Z-Image's VAE, an AuraFlow shift of 3, and 20 steps at CFG 5.
+OVIS_TEXT_ENCODER = "ovis_2.5.safetensors"
+
+
+def is_ovis(model: str) -> bool:
+    return "ovis_image" in model.lower()
+
+
 # Chroma1-HD and Chroma1-Radiance (lodestones, Apache 2.0), FLUX-based, as in ComfyUI's templates: the T5-XXL encoder
 # without padding (SD 3.5 Large Turbo's file), an AuraFlow shift of 1 and CFG 3.5. HD: Z-Image's VAE, 26 steps on the
 # beta schedule. Radiance samples in pixel space (no VAE), 30 steps on a beta schedule with alpha and beta 0.4.
@@ -944,6 +953,14 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyLatentImage"
+    elif is_ovis(p.checkpoint):
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "shift": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["unet", 0], "shift": 3.0}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": OVIS_TEXT_ENCODER, "type": "ovis"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": ZIMAGE_VAE}},
+        }
+        model, clip, vae, empty_latent = ["shift", 0], ["clip", 0], ["vae", 0], "EmptySD3LatentImage"
     elif is_chroma(p.checkpoint):
         radiance = is_chroma_radiance(p.checkpoint)
         g = {
@@ -1236,7 +1253,7 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, ChronoEdit, OmniGen2, Chroma, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, ChronoEdit, OmniGen2, Chroma, Ovis-Image, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         loras = self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if FIRERED_LORA in loras else [u])]
@@ -1246,7 +1263,7 @@ class ComfyClient:
             unets = unets + [u + MOSS_EDIT for u in unets if is_moss(u) and "sft" in u.lower()]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or is_omnigen(u) or is_chroma(u) or (is_ideogram(u) and "unconditional" not in u)] + chrono + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or is_omnigen(u) or is_chroma(u) or is_ovis(u) or (is_ideogram(u) and "unconditional" not in u)] + chrono + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

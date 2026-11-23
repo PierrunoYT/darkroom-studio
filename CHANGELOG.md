@@ -104,6 +104,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Chroma1-HD and Chroma1-Radiance (Apache 2.0), FLUX-based, following ComfyUI's templates: text-to-image and img2img
   at CFG 3.5, HD with 26 steps on the beta schedule and Radiance in pixel space with 30. They reuse SD 3.5 Large Turbo's
   T5-XXL encoder and Z-Image's VAE; the Modal download step fetches the two models.
+- Ovis-Image 7B (Apache 2.0), a text-to-image model that renders text well, following ComfyUI's template: 20 steps at
+  CFG 5 with img2img. It reuses Z-Image's VAE; the Modal download step fetches the model and its Ovis 2.5 text encoder.
 - Missing variants of models Darkroom already had: Krea 2 Raw (52 steps at CFG 3.5), Boogu Base (30 steps at CFG 4)
   and Boogu Edit Turbo (the 1K hotfix, 4 steps at CFG 1), from their model cards; and MOSS-Image's edit LoRA, listed as
   the SFT checkpoint `+ Edit LoRA`, following ComfyUI's edit template. The Modal download step fetches them.

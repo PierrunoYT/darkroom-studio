@@ -13,7 +13,7 @@ from websocket import WebSocketException
 
 from darkroom.comfy import (CHRONO_DISTILL, CHRONO_MAX_IMAGES, FIRERED_MAX_IMAGES, OMNIGEN_MAX_IMAGES, PH3_MAX_IMAGES, JOYAI_MAX_IMAGES, LIGHTNING, LONGCAT_MAX_IMAGES, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_anima, is_kandinsky, is_pixeldit, is_boogu, is_chroma, is_chroma_radiance, is_chrono, is_edit_only, is_ernie, is_minimax_h3, is_omnigen, is_ph3, is_fibo, is_hidream, is_joyai, is_lens, is_longcat, is_krea, is_mage, is_ming, is_sd3,
+                            is_anima, is_kandinsky, is_pixeldit, is_boogu, is_chroma, is_chroma_radiance, is_chrono, is_edit_only, is_ernie, is_minimax_h3, is_omnigen, is_ovis, is_ph3, is_fibo, is_hidream, is_joyai, is_lens, is_longcat, is_krea, is_mage, is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -104,6 +104,8 @@ def _preset(model: str):
         return (1024, 50, 3.5, "euler", "simple") if "base" in model.lower() else (1024, 16, 1, "euler", "simple")
     if is_mage(model):  # ComfyUI's Mage-Flow templates: Turbo must run 4 steps at CFG 1
         return (1024, 4, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 30, 5, "euler", "simple")
+    if is_ovis(model):  # ComfyUI's Ovis-Image template
+        return 1024, 20, 5, "euler", "simple"
     if is_chroma(model):  # ComfyUI's Chroma1-HD and Radiance templates (Radiance's beta schedule is fixed)
         return (1024, 30, 3.5, "euler", "simple") if is_chroma_radiance(model) else (1024, 26, 3.5, "euler", "beta")
     if is_omnigen(model):  # ComfyUI's OmniGen2 templates
