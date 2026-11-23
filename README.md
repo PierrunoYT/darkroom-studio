@@ -26,7 +26,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
 - **Instruction editing** with Qwen-Image 2.1, FLUX 3 Klein,
   [Fibo 2.0](https://huggingface.co/briaai/Fibo-2.0-dev),
   [JoyAI Image Edit](https://huggingface.co/jdopensource/JoyAI-Image-Edit) (Apache 2.0, edit only), Boogu Image 0.1 Edit,
-  HiDream O1, LongCat-Image-Edit and
+  HiDream O1, LongCat-Image-Edit, NVIDIA's [ChronoEdit](https://huggingface.co/nvidia/ChronoEdit-14B-Diffusers)
+  (NVIDIA Open Model License, edit only) and
   [FireRed Image Edit 1.1](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1) (Apache 2.0, edit only): drop an
   image in the **Edit** tab and describe the change, such as *make it night time with rain*, optionally with more
   reference images
@@ -351,6 +352,26 @@ It uses FireRed's `qwen_2.5_vl_7b_fp8_scaled.safetensors` text encoder and Z-Ima
 any diffusion model whose name contains `longcat_image` and builds the graphs from ComfyUI's text-to-image and edit
 templates; Edit Turbo has no template and runs the edit graph with its model card's 8 steps at CFG 1. The edit models
 take one image and only edit; the other only generates from text. They render new text in edits poorly.
+
+For [ChronoEdit 14B](https://huggingface.co/nvidia/ChronoEdit-14B-Diffusers) from NVIDIA (NVIDIA Open Model License),
+an edit-only model built on Wan 2.1 image-to-video, download (about 41 GB) from
+[Comfy-Org/Wan_2.2_ComfyUI_Repackaged](https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged) and
+[Comfy-Org/Wan_2.1_ComfyUI_repackaged](https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged):
+
+```
+ComfyUI/models/diffusion_models/chrono_edit_14B_fp16.safetensors           (20 steps, CFG 4)
+ComfyUI/models/loras/chronoedit_distill_lora.safetensors                    (8 steps, CFG 1)
+ComfyUI/models/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors
+ComfyUI/models/clip_vision/clip_vision_h.safetensors
+```
+
+Its VAE is JoyAI's `wan_2.1_vae.safetensors`. Darkroom lists any diffusion model whose name contains `chrono_edit`, and
+a second time as `+ Distill LoRA` when the LoRA is installed, and builds the graph from ComfyUI's template: it renders a
+5-frame clip that starts from the image and keeps the last frame, loading the weights as fp8. It takes one image. The
+distill LoRA runs at NVIDIA's settings (shift 2, 8 steps), since the template's 4 steps barely change the image; it
+needs a full description of the result, as in the template, and mostly ignores short instructions such as *put it in a
+glass of water*, which the full model follows. On an L40S at 1024×1024, a batch of two edits took about 2¾ minutes, or
+under one with the LoRA, including loading the model.
 
 For [Anima](https://huggingface.co/circlestone-labs/Anima), an anime and illustration model from CircleStone Labs
 and Comfy Org (non-commercial license; the images you make may be used commercially), download (about 14 GB) from

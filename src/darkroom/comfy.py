@@ -311,7 +311,24 @@ def is_ph3(model: str) -> bool:
 
 def is_edit_only(model: str) -> bool:
     return (is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model) or is_longcat_edit(model)
-            or is_moss_edit(model))
+            or is_moss_edit(model) or is_chrono(model))
+
+
+# ChronoEdit 14B (NVIDIA Open Model License), as in ComfyUI's template: a Wan 2.1 image-to-video model that edits by
+# generating a 5-frame clip from the image and keeping the last frame. The UMT5-XXL encoder, CLIP Vision H on the image,
+# the Wan 2.1 VAE (JoyAI's file), shift 5 and a temporal RoPE scale of 7; 20 uni_pc steps at CFG 4. Edit only, one
+# image. Darkroom lists it a second time with this suffix to run its distill LoRA at NVIDIA's settings: shift 2, 8 steps
+# at CFG 1 (the template's 4 steps at shift 5 barely edit).
+CHRONO_TEXT_ENCODER = "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+CHRONO_CLIP_VISION = "clip_vision_h.safetensors"
+CHRONO_LORA = "chronoedit_distill_lora.safetensors"
+CHRONO_DISTILL = " + Distill LoRA"
+CHRONO_FRAMES = 5
+CHRONO_MAX_IMAGES = 1
+
+
+def is_chrono(model: str) -> bool:
+    return "chrono_edit" in model.lower()
 
 
 # LongCat-Image and LongCat-Image-Edit (Meituan, Apache 2.0), as in ComfyUI's templates. Both use FireRed's Qwen2.5-VL 7B
@@ -346,7 +363,7 @@ def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
             or is_joyai(model) or is_boogu_edit(model) or is_hidream(model) or is_longcat_edit(model)
-            or is_moss_edit(model) or is_minimax_h3(model) or is_ph3(model)
+            or is_moss_edit(model) or is_minimax_h3(model) or is_ph3(model) or is_chrono(model)
             or is_fibo(model))
 
 
@@ -665,6 +682,36 @@ def build_workflow(p: Params) -> dict:
                 "json_string": ["unfence_end", 0], "key": "prompt"}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         clip, vae, empty_latent = None, ["ckpt", 2], "EmptyHiDreamO1LatentImage"
+    elif is_chrono(p.checkpoint):
+        if not p.edit_images:
+            raise ValueError("ChronoEdit only edits images")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {
+                "unet_name": p.checkpoint.removesuffix(CHRONO_DISTILL), "weight_dtype": "fp8_e4m3fn"}},
+            "shift": {"class_type": "ModelSamplingSD3", "inputs": {
+                "model": ["unet", 0], "shift": 2.0 if p.checkpoint.endswith(CHRONO_DISTILL) else 5.0}},
+            "rope": {"class_type": "ScaleROPE", "inputs": {
+                "model": ["shift", 0], "scale_x": 1.0, "shift_x": 0.0, "scale_y": 1.0, "shift_y": 0.0,
+                "scale_t": 7.0, "shift_t": 0.0}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": CHRONO_TEXT_ENCODER, "type": "wan"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": JOYAI_VAE}},
+            "clip_vision": {"class_type": "CLIPVisionLoader", "inputs": {"clip_name": CHRONO_CLIP_VISION}},
+            "vision": {"class_type": "CLIPVisionEncode", "inputs": {
+                "clip_vision": ["clip_vision", 0], "image": ["ref0", 0], "crop": "none"}},
+            "pos": {"class_type": "CLIPTextEncode", "inputs": {"text": p.prompt, "clip": ["clip", 0]}},
+            "neg": {"class_type": "CLIPTextEncode", "inputs": {"text": p.negative, "clip": ["clip", 0]}},
+            # Scales the image to the output size and makes the conditioning and the 5-frame latent.
+            "i2v": {"class_type": "WanImageToVideo", "inputs": {
+                "positive": ["pos", 0], "negative": ["neg", 0], "vae": ["vae", 0], "width": p.width,
+                "height": p.height, "length": CHRONO_FRAMES, "batch_size": 1, "clip_vision_output": ["vision", 0],
+                "start_image": ["ref0", 0]}},
+        }
+        model = ["rope", 0]
+        if p.checkpoint.endswith(CHRONO_DISTILL):
+            g["lora"] = {"class_type": "LoraLoaderModelOnly", "inputs": {
+                "model": model, "lora_name": CHRONO_LORA, "strength_model": 1.0}}
+            model = ["lora", 0]
+        clip, vae, empty_latent = None, ["vae", 0], None
     elif is_longcat(p.checkpoint):
         if is_longcat_edit(p.checkpoint) != bool(p.edit_images):
             raise ValueError("LongCat-Image-Edit only edits, and LongCat-Image only generates from text")
@@ -896,6 +943,8 @@ def build_workflow(p: Params) -> dict:
         positive, negative = ["refs", 0], ["refs", 1]
     elif is_moss_edit(p.checkpoint):
         positive, negative = ["pos", 0], ["neg", 0]
+    elif is_chrono(p.checkpoint):
+        positive, negative = ["i2v", 0], ["i2v", 1]
     elif is_minimax_h3(p.checkpoint):
         positive, negative = ["text", 0], ["neg", 0]
     elif is_ph3(p.checkpoint):
@@ -929,6 +978,8 @@ def build_workflow(p: Params) -> dict:
               or is_moss_edit(p.checkpoint)):
             g["latent"] = {"class_type": empty_latent,
                            "inputs": {"width": p.width, "height": p.height, "batch_size": p.batch}}
+        elif is_chrono(p.checkpoint):
+            g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["i2v", 2], "amount": p.batch}}
         elif is_longcat(p.checkpoint):
             g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["resize", 0], "vae": vae}}
             g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["encode", 0], "amount": p.batch}}
@@ -1049,7 +1100,15 @@ def build_workflow(p: Params) -> dict:
             },
         }
     g["decode"] = {"class_type": "VAEDecode", "inputs": {"samples": ["sample", 0], "vae": vae}}
-    g["save"] = {"class_type": "SaveImage", "inputs": {"images": ["decode", 0], "filename_prefix": "Darkroom"}}
+    if is_chrono(p.checkpoint):
+        # The decoded batch holds each clip's frames in turn; the last frame of each is the edit.
+        for b in range(p.batch):
+            g[f"frame{b}"] = {"class_type": "ImageFromBatch", "inputs": {
+                "image": ["decode", 0], "batch_index": (b + 1) * CHRONO_FRAMES - 1, "length": 1}}
+            g[f"save{b}"] = {"class_type": "SaveImage", "inputs": {
+                "images": [f"frame{b}", 0], "filename_prefix": "Darkroom"}}
+    else:
+        g["save"] = {"class_type": "SaveImage", "inputs": {"images": ["decode", 0], "filename_prefix": "Darkroom"}}
     return g
 
 
@@ -1085,15 +1144,17 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, ChronoEdit, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
-        lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
-        firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
-        if MOSS_EDIT_LORA in self._choices("LoraLoaderModelOnly", "lora_name"):
+        loras = self._choices("LoraLoaderModelOnly", "lora_name")
+        firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if FIRERED_LORA in loras else [u])]
+        chrono = [name for u in unets if is_chrono(u)
+                  for name in ([u, u + CHRONO_DISTILL] if CHRONO_LORA in loras else [u])]
+        if MOSS_EDIT_LORA in loras:
             unets = unets + [u + MOSS_EDIT for u in unets if is_moss(u) and "sft" in u.lower()]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or (is_ideogram(u) and "unconditional" not in u)] + chrono + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

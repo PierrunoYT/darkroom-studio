@@ -138,6 +138,14 @@ MODELS = [
     # 8 GB), as in ComfyUI's template.
     ("diffusion_models", "Comfy-Org/PixelDiT", "diffusion_models/pixeldit_1300m_1024px_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/PixelDiT", "text_encoders/gemma_2_2b_it_elm_bf16.safetensors"),
+    # ChronoEdit 14B (NVIDIA Open Model License) and its distill LoRA, as in ComfyUI's template, with Wan 2.1's UMT5-XXL
+    # encoder and CLIP Vision H (about 41 GB). Its Wan 2.1 VAE is JoyAI's file. Edit only.
+    ("diffusion_models", "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
+     "split_files/diffusion_models/chrono_edit_14B_fp16.safetensors"),
+    ("loras", "Comfy-Org/Wan_2.2_ComfyUI_Repackaged", "split_files/loras/chronoedit_distill_lora.safetensors"),
+    ("text_encoders", "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+     "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"),
+    ("clip_vision", "Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/clip_vision/clip_vision_h.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),
