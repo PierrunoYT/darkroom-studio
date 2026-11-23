@@ -309,6 +309,20 @@ def is_ph3(model: str) -> bool:
     return model.lower().startswith(("p-h3-image_", "p-image-oss_"))
 
 
+# Chroma1-HD and Chroma1-Radiance (lodestones, Apache 2.0), FLUX-based, as in ComfyUI's templates: the T5-XXL encoder
+# without padding (SD 3.5 Large Turbo's file), an AuraFlow shift of 1 and CFG 3.5. HD: Z-Image's VAE, 26 steps on the
+# beta schedule. Radiance samples in pixel space (no VAE), 30 steps on a beta schedule with alpha and beta 0.4.
+CHROMA_TEXT_ENCODER = "t5xxl_fp16.safetensors"
+
+
+def is_chroma(model: str) -> bool:
+    return "chroma" in model.lower()
+
+
+def is_chroma_radiance(model: str) -> bool:
+    return is_chroma(model) and "radiance" in model.lower()
+
+
 # OmniGen2 (Apache 2.0), as in ComfyUI's templates: one model for text-to-image and editing, with a Qwen2.5-VL 3B text
 # encoder and Z-Image's VAE. A dual guider: CFG 5 on the prompt, 2 on the images. Each image is encoded and attached to
 # both prompts as a reference latent; the first is scaled to the output size, the others to 1 MP. 20 steps.
@@ -930,6 +944,23 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyLatentImage"
+    elif is_chroma(p.checkpoint):
+        radiance = is_chroma_radiance(p.checkpoint)
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": CHROMA_TEXT_ENCODER, "type": "chroma"}},
+            "tok": {"class_type": "T5TokenizerOptions", "inputs": {"clip": ["clip", 0], "min_padding": 0, "min_length": 0}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": "pixel_space" if radiance else ZIMAGE_VAE}},
+        }
+        model = ["unet", 0]
+        if radiance:
+            g["radiance"] = {"class_type": "ChromaRadianceOptions", "inputs": {
+                "model": model, "preserve_wrapper": True, "start_sigma": 1.0, "end_sigma": 0.0, "nerf_tile_size": -1,
+                "force_sequential_txt_ids": False}}
+            model = ["radiance", 0]
+        g["shift"] = {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": model, "shift": 1.0}}
+        model, clip, vae = ["shift", 0], ["tok", 0], ["vae", 0]
+        empty_latent = "EmptyChromaRadianceLatentImage" if radiance else "EmptySD3LatentImage"
     elif is_pixeldit(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -1071,6 +1102,21 @@ def build_workflow(p: Params) -> dict:
         g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
             "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
             "sigmas": ["sigmas", 0], "latent_image": ["text", 1]}}
+    elif is_chroma_radiance(p.checkpoint):
+        # The template's sampler: a beta schedule with alpha and beta 0.4; img2img keeps its low-noise tail.
+        g["sigmas"] = {"class_type": "BetaSamplingScheduler", "inputs": {
+            "model": model, "steps": p.steps, "alpha": 0.4, "beta": 0.4}}
+        sigmas = ["sigmas", 0]
+        if denoise < 1:
+            g["split"] = {"class_type": "SplitSigmasDenoise", "inputs": {"sigmas": sigmas, "denoise": denoise}}
+            sigmas = ["split", 1]
+        g["noise"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": p.seed}}
+        g["guider"] = {"class_type": "CFGGuider", "inputs": {
+            "model": model, "positive": positive, "negative": negative, "cfg": p.cfg}}
+        g["sampler"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}}
+        g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
+            "sigmas": sigmas, "latent_image": ["latent", 0]}}
     elif is_omnigen(p.checkpoint):
         # The templates' guider: the prompt against the images (CFG), and the images against the plain negative (2).
         g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
@@ -1190,7 +1236,7 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, ChronoEdit, OmniGen2, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, ChronoEdit, OmniGen2, Chroma, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         loras = self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if FIRERED_LORA in loras else [u])]
@@ -1200,7 +1246,7 @@ class ComfyClient:
             unets = unets + [u + MOSS_EDIT for u in unets if is_moss(u) and "sft" in u.lower()]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or is_omnigen(u) or (is_ideogram(u) and "unconditional" not in u)] + chrono + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or is_omnigen(u) or is_chroma(u) or (is_ideogram(u) and "unconditional" not in u)] + chrono + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

@@ -138,6 +138,11 @@ MODELS = [
     # 8 GB), as in ComfyUI's template.
     ("diffusion_models", "Comfy-Org/PixelDiT", "diffusion_models/pixeldit_1300m_1024px_bf16.safetensors"),
     ("text_encoders", "Comfy-Org/PixelDiT", "text_encoders/gemma_2_2b_it_elm_bf16.safetensors"),
+    # Chroma1-HD (fp8) and Chroma1-Radiance (lodestones, Apache 2.0), as in ComfyUI's templates (about 28 GB). They use
+    # SD 3.5 Large Turbo's T5-XXL encoder; HD uses Z-Image's VAE and Radiance none.
+    ("diffusion_models", "Comfy-Org/Chroma1-HD_repackaged", "split_files/diffusion_models/Chroma1-HD-fp8mixed.safetensors"),
+    ("diffusion_models", "Comfy-Org/Chroma1-Radiance_Repackaged",
+     "split_files/diffusion_models/chroma-radiance-x0.safetensors"),
     # OmniGen2 (Apache 2.0) with its Qwen2.5-VL 3B encoder, as in ComfyUI's templates (about 15 GB). Its VAE is Z-Image's.
     ("diffusion_models", "Comfy-Org/Omnigen2_ComfyUI_repackaged", "split_files/diffusion_models/omnigen2_fp16.safetensors"),
     ("text_encoders", "Comfy-Org/Omnigen2_ComfyUI_repackaged", "split_files/text_encoders/qwen_2.5_vl_fp16.safetensors"),

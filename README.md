@@ -20,7 +20,8 @@ Write a prompt, pick a checkpoint, and watch the image develop step by step.
   [HiDream O1](https://huggingface.co/HiDream-ai/HiDream-O1-Image) (MIT), which renders at about 4 MP, and with Baidu's
   [ERNIE-Image](https://huggingface.co/baidu/ERNIE-Image) (Apache 2.0), and with Meituan's
   [LongCat-Image](https://huggingface.co/meituan-longcat/LongCat-Image) (Apache 2.0), and with
-  [OmniGen2](https://huggingface.co/OmniGen2/OmniGen2) (Apache 2.0)
+  [OmniGen2](https://huggingface.co/OmniGen2/OmniGen2) (Apache 2.0), and with
+  [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD) and Radiance (Apache 2.0), FLUX-based models
 - **Prompt expansion:** the FLUX 3 Klein and MOSS-Image upsamplers and the Krea 2 refiner (on by default) and Qwen-Image 2.1's prompt
   enhancer (off by default)
   turn a short prompt into a full scene caption, and Darkroom shows the expanded prompt
@@ -385,6 +386,21 @@ ComfyUI/models/text_encoders/qwen_2.5_vl_fp16.safetensors
 Its VAE is Z-Image's `ae.safetensors`. Darkroom lists any diffusion model whose name contains `omnigen2` and builds the
 graphs from ComfyUI's text-to-image and edit templates: a dual guider weighs the prompt at the CFG scale and the images
 at 2. It edits with up to 3 images. Edits follow the instruction but often redraw the background.
+
+For [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD) and
+[Chroma1-Radiance](https://huggingface.co/lodestones/Chroma1-Radiance) (Apache 2.0), download (about 28 GB) from
+[Comfy-Org/Chroma1-HD_repackaged](https://huggingface.co/Comfy-Org/Chroma1-HD_repackaged) and
+[Comfy-Org/Chroma1-Radiance_Repackaged](https://huggingface.co/Comfy-Org/Chroma1-Radiance_Repackaged):
+
+```
+ComfyUI/models/diffusion_models/Chroma1-HD-fp8mixed.safetensors            (26 steps, CFG 3.5, beta)
+ComfyUI/models/diffusion_models/chroma-radiance-x0.safetensors              (30 steps, CFG 3.5)
+```
+
+They use SD 3.5 Large Turbo's `t5xxl_fp16.safetensors` text encoder; HD uses Z-Image's `ae.safetensors` VAE, and
+Radiance renders in pixel space without one. Darkroom lists any diffusion model whose name contains `chroma` and builds
+the graphs from ComfyUI's templates. Radiance samples on the template's own beta schedule, so the scheduler setting does
+not apply to it. Both work best with long, descriptive prompts; the templates' negatives describe flaws in sentences.
 
 For [Anima](https://huggingface.co/circlestone-labs/Anima), an anime and illustration model from CircleStone Labs
 and Comfy Org (non-commercial license; the images you make may be used commercially), download (about 14 GB) from
