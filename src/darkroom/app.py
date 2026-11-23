@@ -13,7 +13,7 @@ from websocket import WebSocketException
 
 from darkroom.comfy import (FIRERED_MAX_IMAGES, JOYAI_MAX_IMAGES, LIGHTNING, LONGCAT_MAX_IMAGES, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_boogu, is_edit_only, is_ernie, is_fibo, is_hidream, is_joyai, is_lens, is_longcat, is_krea, is_mage, is_ming, is_sd3,
+                            is_boogu, is_edit_only, is_ernie, is_minimax_h3, is_fibo, is_hidream, is_joyai, is_lens, is_longcat, is_krea, is_mage, is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -90,10 +90,11 @@ def presets(model: str | None):
         else "Ideogram JSON captioner" if is_ideogram(model) else "Ming rewriter" if is_ming(model) \
         else "Krea 2 refiner" if is_krea(model) \
         else "Fibo 2.0 enhancer" if is_fibo(model) else "HiDream O1 refiner" if is_hidream(model) \
-        else "ERNIE-Image enhancer" if is_ernie(model) else "Qwen-Image enhancer"
+        else "ERNIE-Image enhancer" if is_ernie(model) else "MiniMax-H3 enhancer" if is_minimax_h3(model) \
+        else "Qwen-Image enhancer"
     upsampler = gr.update(visible=can_expand(model),
                           value=is_flux3(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
-                          or is_krea(model) or is_fibo(model) or is_ernie(model),
+                          or is_krea(model) or is_fibo(model) or is_ernie(model) or is_minimax_h3(model),
                           label=f"Expand prompt with the {name}")
     return (*_preset(model), upsampler)
 
@@ -109,6 +110,8 @@ def _preset(model: str):
         return 1024, 20, 4, "euler", "simple"
     if is_ernie(model):  # ComfyUI's ERNIE-Image templates
         return (1024, 8, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 20, 4, "euler", "simple")
+    if is_minimax_h3(model):  # ComfyUI's MiniMax-H3-Image templates (4 MP; the model is tuned for 4 to 20 MP)
+        return 2048, 6, 1, "euler", "simple"
     if is_hidream(model):  # ComfyUI's HiDream O1 templates: Dev is distilled to 28 LCM steps at CFG 1
         return (2048, 28, 1, "lcm", "normal") if "dev" in model.lower() else (2048, 40, 5, "dpmpp_2m_sde_gpu", "normal")
     if is_lens(model):  # ComfyUI's Lens templates (they use 1440; 1024 is faster)
@@ -211,7 +214,7 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
         raise gr.Error("This model only edits: drop an image in the Edit tab.")
     if edit_image is not None:
         if not can_edit(ckpt):
-            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, LongCat-Image-Edit or FireRed Image Edit. Pick one of them, or "
+            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, MiniMax-H3-Image, LongCat-Image-Edit or FireRed Image Edit. Pick one of them, or "
                            "clear the Edit tab.")
         if init_image is not None:
             raise gr.Error("Use either the Img2img tab or the Edit tab, not both.")
@@ -293,7 +296,7 @@ def build_ui() -> gr.Blocks:
                                                "before sampling. Turn off when yours already is one.")
                         aspect = gr.Radio(list(ASPECTS), value="1:1", label="Aspect ratio")
                         base = gr.Radio([512, 768, 1024, 2048], value=512, label="Base resolution",
-                                        info="512 for SD 1.5, 1024 for SDXL, SD 3.5, Z-Image, FLUX 3, Qwen-Image and MOSS, 2048 for HiDream O1")
+                                        info="512 for SD 1.5, 1024 for SDXL, SD 3.5, Z-Image, FLUX 3, Qwen-Image and MOSS, 2048 for HiDream O1 and MiniMax-H3")
                         custom_size = gr.Checkbox(label="Custom size", value=False)
                         with gr.Row(visible=False) as custom_row:
                             width = gr.Slider(64, 2048, 512, step=64, label="Width")
@@ -313,14 +316,14 @@ def build_ui() -> gr.Blocks:
                         denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
                                             info="Lower keeps more of the init image")
                     with gr.Tab("Edit", id="edit"):
-                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, LongCat-Image-Edit and FireRed Image Edit only. Write what to change as the prompt, "
+                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, MiniMax-H3-Image, LongCat-Image-Edit and FireRed Image Edit only. Write what to change as the prompt, "
                                     "such as *make the boat red*. The result keeps this image's shape.")
                         edit_image = gr.Image(label="Image to edit", type="pil", height=260)
                         edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,
                                                columns=4, height=160, file_types=["image"],
                                                elem_id="edit_refs")
                         gr.Markdown("With Qwen-Image, refer to the images as `<image1>`, `<image2>`, …; with FLUX 3, "
-                                    "as *the first image*, *the second image*; with FireRed, as *Picture 1*, *Picture 2*; with Fibo 2.0, as `<image_1>`, `<image_2>`. "
+                                    "as *the first image*, *the second image*; with FireRed, as *Picture 1*, *Picture 2*; with Fibo 2.0, as `<image_1>`, `<image_2>`; with MiniMax-H3, as `<Picture 1>`, `<Picture 2>`. "
                                     "Up to 10 images in total (8 with Ming, 6 with JoyAI, 3 with Mage-Flow and FireRed, 1 with LongCat).",
                                     elem_classes="hint")
                     with gr.Tab("Connection"):

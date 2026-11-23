@@ -97,6 +97,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Missing variants of models Darkroom already had: Krea 2 Raw (52 steps at CFG 3.5), Boogu Base (30 steps at CFG 4)
   and Boogu Edit Turbo (the 1K hotfix, 4 steps at CFG 1), from their model cards; and MOSS-Image's edit LoRA, listed as
   the SFT checkpoint `+ Edit LoRA`, following ComfyUI's edit template. The Modal download step fetches them.
+- MiniMax-H3-Image (untested), following ComfyUI's templates: text-to-image and editing with `<Picture N>`
+  references, 6 steps at CFG 1 at about 4 MP, and its Qwen3.5 9B prompt enhancer (on by default). Its license excludes
+  the EU, UK, South Korea and the US, so it runs on its own Modal app, `modal_h3.py`, pinned to GPUs in Japan or Canada.
 - Send to Edit: after picking an image in the contact sheet, the button loads it as the image to edit and opens the
   Edit tab, so edits can be chained.
 

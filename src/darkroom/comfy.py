@@ -248,6 +248,22 @@ def is_ernie(model: str) -> bool:
     return "ernie-image" in model.lower()
 
 
+# MiniMax-H3-Image, int8 as in ComfyUI's templates. Its license excludes the EU, UK, South Korea and the US, so it runs
+# on its own Modal app (modal_h3.py). One conditioning node takes the prompt and the pictures, referred to as
+# <Picture 1>, <Picture 2>, ...; the first is the one to edit. 6 steps at CFG 1 against a zeroed negative, at about 4 MP
+# in multiples of 32. The prompt enhancer (Qwen3.5 9B) reasons first and answers in JSON; for edits it sees the image.
+MINIMAX_H3_TEXT_ENCODER = "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+MINIMAX_H3_VAE = "minimax_h3_image_vae_fp16.safetensors"
+MINIMAX_H3_ENHANCER = "qwen3.5_9b_w4a8_gptq.safetensors"
+MINIMAX_H3_SYSTEM_PROMPT = files("darkroom").joinpath("minimax_h3_system_prompt.txt").read_text().strip()
+MINIMAX_H3_T2I_PROMPT = files("darkroom").joinpath("minimax_h3_t2i_pe_prompt.txt").read_text()
+MINIMAX_H3_EDIT_PROMPT = files("darkroom").joinpath("minimax_h3_edit_pe_prompt.txt").read_text()
+
+
+def is_minimax_h3(model: str) -> bool:
+    return "minimax_h3_image" in model.lower()
+
+
 def is_edit_only(model: str) -> bool:
     return (is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model) or is_longcat_edit(model)
             or is_moss_edit(model))
@@ -285,7 +301,7 @@ def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
             or is_joyai(model) or is_boogu_edit(model) or is_hidream(model) or is_longcat_edit(model)
-            or is_moss_edit(model)
+            or is_moss_edit(model) or is_minimax_h3(model)
             or is_fibo(model))
 
 
@@ -293,7 +309,7 @@ def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
     return (is_flux3(model) or is_qwen_image(model) or (is_moss(model) and not is_moss_edit(model)) or is_ideogram(model)
             or is_ming(model)
-            or is_krea(model) or is_fibo(model) or is_hidream(model) or is_ernie(model))
+            or is_krea(model) or is_fibo(model) or is_hidream(model) or is_ernie(model) or is_minimax_h3(model))
 
 
 def _canvas(width: int, height: int) -> str:
@@ -304,7 +320,7 @@ def _canvas(width: int, height: int) -> str:
 def build_workflow(p: Params) -> dict:
     """Build a ComfyUI API-format graph: txt2img, img2img when init_image is set, or an instruction edit when
     edit_images is set."""
-    if is_hidream(p.checkpoint):
+    if is_hidream(p.checkpoint) or is_minimax_h3(p.checkpoint):
         p = replace(p, width=p.width // 32 * 32, height=p.height // 32 * 32)
     if p.edit_images and not can_edit(p.checkpoint):
         raise ValueError(f"{p.checkpoint} cannot edit images; use Qwen-Image 2.1 or FLUX 3 Klein")
@@ -654,6 +670,40 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyFlux2LatentImage"
+    elif is_minimax_h3(p.checkpoint):
+        if p.init_image:
+            raise ValueError("MiniMax-H3-Image has no img2img; use the Edit tab")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": MINIMAX_H3_TEXT_ENCODER, "type": "minimax"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": MINIMAX_H3_VAE}},
+            # Outputs the positive conditioning and the empty latent at the given size.
+            "text": {"class_type": "MiniMaxH3ImageConditioning", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": prompt, "width": p.width, "height": p.height}},
+            "neg": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["text", 0]}},
+        }
+        if p.edit_images:
+            # The template scales the picture to edit to the output size (4 MP, multiples of 32).
+            g["resize"] = {"class_type": "ImageScale", "inputs": {
+                "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
+                "crop": "center"}}
+            g["text"]["inputs"].update({f"images.image_{i + 1}": ["resize", 0] if i == 0 else [f"ref{i}", 0]
+                                        for i in range(len(p.edit_images))})
+        if expand:
+            task = MINIMAX_H3_EDIT_PROMPT if p.edit_images else MINIMAX_H3_T2I_PROMPT
+            g["enhancer"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": MINIMAX_H3_ENHANCER, "type": "minimax"}}
+            g["enhance"] = {"class_type": "TextGenerateV2", "inputs": {
+                "clip": ["enhancer", 0], "system_prompt": MINIMAX_H3_SYSTEM_PROMPT,
+                "prompt": task.replace("{input text}", p.prompt.strip()), "max_length": 8192, "thinking": True,
+                "use_default_template": True, "mtp": "auto",
+                "sampling_mode": "on", "sampling_mode.temperature": 1, "sampling_mode.top_k": 20,
+                "sampling_mode.top_p": 0.95, "sampling_mode.min_p": 0, "sampling_mode.repetition_penalty": 1,
+                "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed,
+                **({"images.image1": ["resize", 0]} if p.edit_images else {})}}
+            g["upsample"] = {"class_type": "JsonExtractString", "inputs": {
+                "json_string": ["enhance", 0], "key": "expanded_caption"}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+        model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], None
     elif is_lens(p.checkpoint):
         g = {
             "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
@@ -748,6 +798,8 @@ def build_workflow(p: Params) -> dict:
         positive, negative = ["refs", 0], ["refs", 1]
     elif is_moss_edit(p.checkpoint):
         positive, negative = ["pos", 0], ["neg", 0]
+    elif is_minimax_h3(p.checkpoint):
+        positive, negative = ["text", 0], ["neg", 0]
     elif (is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint)
             or is_hidream(p.checkpoint) or is_ernie(p.checkpoint) or is_longcat(p.checkpoint) or (is_boogu(p.checkpoint) and not p.edit_images)):
         positive, negative = ["pos", 0], ["neg", 0]
@@ -778,6 +830,8 @@ def build_workflow(p: Params) -> dict:
         elif is_longcat(p.checkpoint):
             g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["resize", 0], "vae": vae}}
             g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["encode", 0], "amount": p.batch}}
+        elif is_minimax_h3(p.checkpoint):
+            g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["text", 1], "amount": p.batch}}
         elif is_firered(p.checkpoint):
             # Sampling starts from the encoded image to edit, at full denoise (the template's latent).
             g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["resize", 0], "vae": vae}}
@@ -795,8 +849,9 @@ def build_workflow(p: Params) -> dict:
         g["encode"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["scale", 0], "vae": vae}}
         g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["encode", 0], "amount": p.batch}}
         denoise = p.denoise
-    elif is_mage(p.checkpoint) or is_fibo(p.checkpoint):
-        g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {"samples": ["text", 2], "amount": p.batch}}
+    elif is_mage(p.checkpoint) or is_fibo(p.checkpoint) or is_minimax_h3(p.checkpoint):
+        g["latent"] = {"class_type": "RepeatLatentBatch", "inputs": {
+            "samples": ["text", 1 if is_minimax_h3(p.checkpoint) else 2], "amount": p.batch}}
         denoise = 1.0
     else:
         g["latent"] = {
@@ -920,7 +975,7 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
@@ -928,7 +983,7 @@ class ComfyClient:
             unets = unets + [u + MOSS_EDIT for u in unets if is_moss(u) and "sft" in u.lower()]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

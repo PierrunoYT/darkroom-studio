@@ -352,6 +352,24 @@ any diffusion model whose name contains `longcat_image` and builds the graphs fr
 templates; Edit Turbo has no template and runs the edit graph with its model card's 8 steps at CFG 1. The edit models
 take one image and only edit; the other only generates from text. They render new text in edits poorly.
 
+For [MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image), text-to-image and edit in one model,
+**check its license first**: it excludes the EU, the UK, South Korea and the United States, including using or
+displaying its outputs there. Download (about 55 GB) from that repo, [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3)
+and [Comfy-Org/Qwen3.5](https://huggingface.co/Comfy-Org/Qwen3.5):
+
+```
+ComfyUI/models/diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors   (6 steps, CFG 1)
+ComfyUI/models/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors
+ComfyUI/models/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors                      (prompt enhancer)
+ComfyUI/models/vae/minimax_h3_image_vae_fp16.safetensors
+```
+
+Darkroom lists any diffusion model whose name contains `minimax_h3_image` and builds the graphs from ComfyUI's
+text-to-image and edit templates at about 4 MP (the 2048 base resolution, which picking it sets) in multiples of 32.
+In edits, refer to the images as `<Picture 1>`, `<Picture 2>`; the first is the one to edit. Its prompt enhancer, on
+by default, reasons before it writes the caption, so it adds time; for edits it also sees the image to edit. It has no
+img2img. The Modal app below keeps H3 out of the excluded territories. Darkroom's H3 support has not been tested yet.
+
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),
 [FireRed-Image-Edit-1.0-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.0-ComfyUI) and
@@ -400,6 +418,11 @@ uv run darkroom
 - **New models need a fresh container:** a running container only sees the Volume as it was when it started. After
   the download step, stop it so the next request starts one that lists the new files:
   `uv run modal container list`, then `uv run modal container stop -y <container id>`.
+- **MiniMax-H3-Image:** [`modal_h3.py`](modal_h3.py) is a separate app with its own Volume. Its GPU (H100 by default,
+  `DARKROOM_H3_GPU` to change) runs only in Japan or Canada, and requests route through Mumbai. Pinned regions cost
+  1.75× Modal's base price, and Modal still stores every Volume in the United States. Run Darkroom on your own machine
+  in a country the license allows, and point its Connection tab at this app's URL:
+  `uv run modal run modal_h3.py::download`, then `uv run modal deploy modal_h3.py`. The proxy token works for both apps.
 - **FLUX 3 download:** the repo is gated. Accept its license on Hugging Face and store a token as a Modal secret
   named `huggingface` (`uv run modal secret create huggingface HF_TOKEN=hf_...`) before running the download step.
 
@@ -469,6 +492,7 @@ src/darkroom/moss_image_pe_prompt.txt    system prompt for the MOSS-Image upsamp
 src/darkroom/ideogram4_pe_prompt.txt     system prompt for the Ideogram 4 JSON captioner (ComfyUI template)
 src/darkroom/ming_image_pe_prompt.txt    system prompt for the Ming Image rewriter (ComfyUI template)
 modal_comfyui.py         ComfyUI on a Modal GPU
+modal_h3.py              ComfyUI with MiniMax-H3-Image on a Modal GPU in Japan or Canada
 ```
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
