@@ -414,6 +414,24 @@ In edits, refer to the images as `<Picture 1>`, `<Picture 2>`; the first is the 
 by default, reasons before it writes the caption, so it adds time; for edits it also sees the image to edit. It has no
 img2img. The Modal app below keeps H3 out of the excluded territories. Darkroom's H3 support has not been tested yet.
 
+For [P-Image-OSS](https://huggingface.co/PrunaAI/P-Image-OSS-Comfy) from Pruna, a distilled MiniMax-H3 for text-to-image
+and edits, the same license applies as for MiniMax-H3-Image: it excludes the EU, the UK, South Korea and the United
+States. Download (about 36 GB) from that repo:
+
+```
+ComfyUI/models/diffusion_models/p-h3-image_int8_convrot.safetensors        (8 steps, no CFG)
+ComfyUI/models/text_encoders/p-h3-image_text_encoder_int8_convrot.safetensors
+ComfyUI/models/text_encoders/p-h3-image_prompt_upsampler_w4a8.safetensors  (prompt upsampler)
+ComfyUI/models/vae/p-h3-image_vae_int8_convrot.safetensors
+```
+
+Darkroom lists any diffusion model whose name starts with `p-h3-image_` or `p-image-oss_` (the repo has the same files
+under both names) and builds the graph from ComfyUI's p-h3-image templates: a fixed 8-step schedule without CFG or a
+negative prompt, at about 4 MP (the 2048 base) in multiples of 32; text-to-image is best at 8 MP. Edits take up to 8
+images, referred to as `<Picture 1>`, `<Picture 2>`. The prompt upsampler, on by default, gets the aspect ratio and the
+request, and for edits the image. It renders one image per run and has no img2img. It runs on `modal_h3.py` with
+MiniMax-H3-Image. Darkroom's P-Image-OSS support has not been tested yet.
+
 For FireRed Image Edit 1.1, an edit-only model, download (about 48 GB) from
 [FireRed-Image-Edit-1.1-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI),
 [FireRed-Image-Edit-1.0-ComfyUI](https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.0-ComfyUI) and
@@ -462,7 +480,7 @@ uv run darkroom
 - **New models need a fresh container:** a running container only sees the Volume as it was when it started. After
   the download step, stop it so the next request starts one that lists the new files:
   `uv run modal container list`, then `uv run modal container stop -y <container id>`.
-- **MiniMax-H3-Image:** [`modal_h3.py`](modal_h3.py) is a separate app with its own Volume. Its GPU (H100 by default,
+- **MiniMax-H3-Image and P-Image-OSS:** [`modal_h3.py`](modal_h3.py) is a separate app with its own Volume. Its GPU (H100 by default,
   `DARKROOM_H3_GPU` to change) runs only in Japan or Canada, and requests route through Mumbai. Pinned regions cost
   1.75× Modal's base price, and Modal still stores every Volume in the United States. Run Darkroom on your own machine
   in a country the license allows, and point its Connection tab at this app's URL:
@@ -536,7 +554,7 @@ src/darkroom/moss_image_pe_prompt.txt    system prompt for the MOSS-Image upsamp
 src/darkroom/ideogram4_pe_prompt.txt     system prompt for the Ideogram 4 JSON captioner (ComfyUI template)
 src/darkroom/ming_image_pe_prompt.txt    system prompt for the Ming Image rewriter (ComfyUI template)
 modal_comfyui.py         ComfyUI on a Modal GPU
-modal_h3.py              ComfyUI with MiniMax-H3-Image on a Modal GPU in Japan or Canada
+modal_h3.py              ComfyUI with MiniMax-H3-Image and P-Image-OSS on a Modal GPU in Japan or Canada
 ```
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.

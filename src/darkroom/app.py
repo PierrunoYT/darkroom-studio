@@ -11,9 +11,9 @@ import gradio as gr
 from PIL import Image, PngImagePlugin
 from websocket import WebSocketException
 
-from darkroom.comfy import (FIRERED_MAX_IMAGES, JOYAI_MAX_IMAGES, LIGHTNING, LONGCAT_MAX_IMAGES, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
+from darkroom.comfy import (FIRERED_MAX_IMAGES, PH3_MAX_IMAGES, JOYAI_MAX_IMAGES, LIGHTNING, LONGCAT_MAX_IMAGES, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_anima, is_kandinsky, is_pixeldit, is_boogu, is_edit_only, is_ernie, is_minimax_h3, is_fibo, is_hidream, is_joyai, is_lens, is_longcat, is_krea, is_mage, is_ming, is_sd3,
+                            is_anima, is_kandinsky, is_pixeldit, is_boogu, is_edit_only, is_ernie, is_minimax_h3, is_ph3, is_fibo, is_hidream, is_joyai, is_lens, is_longcat, is_krea, is_mage, is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -91,10 +91,10 @@ def presets(model: str | None):
         else "Krea 2 refiner" if is_krea(model) \
         else "Fibo 2.0 enhancer" if is_fibo(model) else "HiDream O1 refiner" if is_hidream(model) \
         else "ERNIE-Image enhancer" if is_ernie(model) else "MiniMax-H3 enhancer" if is_minimax_h3(model) \
-        else "Qwen-Image enhancer"
+        else "P-Image-OSS upsampler" if is_ph3(model) else "Qwen-Image enhancer"
     upsampler = gr.update(visible=can_expand(model),
                           value=is_flux3(model) or is_moss(model) or is_ideogram(model) or is_ming(model)
-                          or is_krea(model) or is_fibo(model) or is_ernie(model) or is_minimax_h3(model),
+                          or is_krea(model) or is_fibo(model) or is_ernie(model) or is_minimax_h3(model) or is_ph3(model),
                           label=f"Expand prompt with the {name}")
     return (*_preset(model), upsampler)
 
@@ -116,6 +116,8 @@ def _preset(model: str):
         return 1024, 50, 3.5, "euler", "simple"
     if is_anima(model):  # ComfyUI's Anima Base v1.0 template; Turbo: its model card's 8 steps at CFG 1
         return (1024, 8, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 30, 4, "euler", "simple")
+    if is_ph3(model):  # ComfyUI's p-h3-image templates (4 MP; text-to-image is best at 8 MP); its sigmas are fixed
+        return 2048, 8, 1, "er_sde", "simple"
     if is_minimax_h3(model):  # ComfyUI's MiniMax-H3-Image templates (4 MP; the model is tuned for 4 to 20 MP)
         return 2048, 6, 1, "euler", "simple"
     if is_hidream(model):  # ComfyUI's HiDream O1 templates: Dev is distilled to 28 LCM steps at CFG 1
@@ -220,13 +222,13 @@ def generate(url, ckpt, prompt, negative, aspect, base, width, height, custom_si
         raise gr.Error("This model only edits: drop an image in the Edit tab.")
     if edit_image is not None:
         if not can_edit(ckpt):
-            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, MiniMax-H3-Image, LongCat-Image-Edit or FireRed Image Edit. Pick one of them, or "
+            raise gr.Error("Editing needs Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, MiniMax-H3-Image, P-Image-OSS, LongCat-Image-Edit or FireRed Image Edit. Pick one of them, or "
                            "clear the Edit tab.")
         if init_image is not None:
             raise gr.Error("Use either the Img2img tab or the Edit tab, not both.")
         limit = (FIRERED_MAX_IMAGES if is_firered(ckpt) else MAGE_MAX_IMAGES if is_mage(ckpt)
                  else JOYAI_MAX_IMAGES if is_joyai(ckpt) else LONGCAT_MAX_IMAGES if is_longcat(ckpt)
-                 else MING_MAX_IMAGES if is_ming(ckpt) else 10)
+                 else MING_MAX_IMAGES if is_ming(ckpt) else PH3_MAX_IMAGES if is_ph3(ckpt) else 10)
         if 1 + len(edit_refs) > limit:
             raise gr.Error(f"This model edits with up to {limit} images in total.")
         # The result keeps the edited image's shape, at about base x base pixels.
@@ -322,15 +324,15 @@ def build_ui() -> gr.Blocks:
                         denoise = gr.Slider(0.05, 1.0, 0.6, step=0.05, label="Denoise strength",
                                             info="Lower keeps more of the init image")
                     with gr.Tab("Edit", id="edit"):
-                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, MiniMax-H3-Image, LongCat-Image-Edit and FireRed Image Edit only. Write what to change as the prompt, "
+                        gr.Markdown("Qwen-Image 2.1, FLUX 3 Klein, Ming Image, Mage-Flow-Edit, Fibo 2.0, JoyAI Image Edit, MOSS-Image Edit LoRA, Boogu Edit, HiDream O1, MiniMax-H3-Image, P-Image-OSS, LongCat-Image-Edit and FireRed Image Edit only. Write what to change as the prompt, "
                                     "such as *make the boat red*. The result keeps this image's shape.")
                         edit_image = gr.Image(label="Image to edit", type="pil", height=260)
                         edit_refs = gr.Gallery(label="More reference images (optional)", type="pil", interactive=True,
                                                columns=4, height=160, file_types=["image"],
                                                elem_id="edit_refs")
                         gr.Markdown("With Qwen-Image, refer to the images as `<image1>`, `<image2>`, …; with FLUX 3, "
-                                    "as *the first image*, *the second image*; with FireRed, as *Picture 1*, *Picture 2*; with Fibo 2.0, as `<image_1>`, `<image_2>`; with MiniMax-H3, as `<Picture 1>`, `<Picture 2>`. "
-                                    "Up to 10 images in total (8 with Ming, 6 with JoyAI, 3 with Mage-Flow and FireRed, 1 with LongCat).",
+                                    "as *the first image*, *the second image*; with FireRed, as *Picture 1*, *Picture 2*; with Fibo 2.0, as `<image_1>`, `<image_2>`; with MiniMax-H3 and P-Image-OSS, as `<Picture 1>`, `<Picture 2>`. "
+                                    "Up to 10 images in total (8 with Ming and P-Image-OSS, 6 with JoyAI, 3 with Mage-Flow and FireRed, 1 with LongCat).",
                                     elem_classes="hint")
                     with gr.Tab("Connection"):
                         url = gr.Textbox(label="ComfyUI URL", value=DEFAULT_URL)

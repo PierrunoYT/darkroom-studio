@@ -293,6 +293,22 @@ def is_pixeldit(model: str) -> bool:
     return model.lower().startswith("pixeldit_")
 
 
+# P-Image-OSS (Pruna, MiniMax H3 Community License: excludes the EU, UK, South Korea and the US), a MiniMax-H3 distill,
+# int8 as in Pruna's ComfyUI files; it runs on modal_h3.py. One conditioning node takes the prompt and up to 8 pictures,
+# <Picture 1> being the one to edit, and outputs the latent; 8 steps on a fixed sigma grid with no CFG, after a
+# MiniMax-H3 sigma shift of 1. Its prompt upsampler (on by default) gets the aspect ratio and the request, and for edits
+# the image. One image per run: its latent is a nested audio/video latent that cannot be batched.
+PH3_TEXT_ENCODER = "p-h3-image_text_encoder_int8_convrot.safetensors"
+PH3_VAE = "p-h3-image_vae_int8_convrot.safetensors"
+PH3_UPSAMPLER = "p-h3-image_prompt_upsampler_w4a8.safetensors"
+PH3_SIGMAS = "1.0, 0.984753, 0.967905, 0.951688, 0.925372, 0.881923, 0.810083, 0.528718, 0.0"
+PH3_MAX_IMAGES = 8
+
+
+def is_ph3(model: str) -> bool:
+    return model.lower().startswith(("p-h3-image_", "p-image-oss_"))
+
+
 def is_edit_only(model: str) -> bool:
     return (is_firered(model) or is_mage_edit(model) or is_joyai(model) or is_boogu_edit(model) or is_longcat_edit(model)
             or is_moss_edit(model))
@@ -330,7 +346,7 @@ def can_edit(model: str) -> bool:
     """Models that take an instruction plus reference images."""
     return (is_flux3(model) or is_qwen_image(model) or is_firered(model) or is_ming(model) or is_mage_edit(model)
             or is_joyai(model) or is_boogu_edit(model) or is_hidream(model) or is_longcat_edit(model)
-            or is_moss_edit(model) or is_minimax_h3(model)
+            or is_moss_edit(model) or is_minimax_h3(model) or is_ph3(model)
             or is_fibo(model))
 
 
@@ -338,7 +354,7 @@ def can_expand(model: str) -> bool:
     """Models with a prompt upsampler or enhancer Darkroom can run."""
     return (is_flux3(model) or is_qwen_image(model) or (is_moss(model) and not is_moss_edit(model)) or is_ideogram(model)
             or is_ming(model)
-            or is_krea(model) or is_fibo(model) or is_hidream(model) or is_ernie(model) or is_minimax_h3(model))
+            or is_krea(model) or is_fibo(model) or is_hidream(model) or is_ernie(model) or is_minimax_h3(model) or is_ph3(model))
 
 
 def _canvas(width: int, height: int) -> str:
@@ -349,7 +365,7 @@ def _canvas(width: int, height: int) -> str:
 def build_workflow(p: Params) -> dict:
     """Build a ComfyUI API-format graph: txt2img, img2img when init_image is set, or an instruction edit when
     edit_images is set."""
-    if is_hidream(p.checkpoint) or is_minimax_h3(p.checkpoint):
+    if is_hidream(p.checkpoint) or is_minimax_h3(p.checkpoint) or is_ph3(p.checkpoint):
         p = replace(p, width=p.width // 32 * 32, height=p.height // 32 * 32)
     if p.edit_images and not can_edit(p.checkpoint):
         raise ValueError(f"{p.checkpoint} cannot edit images; use Qwen-Image 2.1 or FLUX 3 Klein")
@@ -699,6 +715,36 @@ def build_workflow(p: Params) -> dict:
                 "sampling_mode.presence_penalty": 0, "sampling_mode.seed": p.seed}}
             g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
         model, clip, vae, empty_latent = ["unet", 0], None, ["vae", 0], "EmptyFlux2LatentImage"
+    elif is_ph3(p.checkpoint):
+        if p.init_image:
+            raise ValueError("P-Image-OSS has no img2img; use the Edit tab")
+        if p.batch > 1:
+            raise ValueError("P-Image-OSS renders one image per run; set the batch size to 1")
+        g = {
+            "unet": {"class_type": "UNETLoader", "inputs": {"unet_name": p.checkpoint, "weight_dtype": "default"}},
+            "shift": {"class_type": "MiniMaxH3SigmaShift", "inputs": {
+                "model": ["unet", 0], "shift_video": 1.0, "shift_audio": 1.0}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": PH3_TEXT_ENCODER, "type": "minimax"}},
+            "vae": {"class_type": "VAELoader", "inputs": {"vae_name": PH3_VAE}},
+            # Outputs the conditioning and the latent at the given size.
+            "text": {"class_type": "PH3ImageConditioning", "inputs": {
+                "clip": ["clip", 0], "vae": ["vae", 0], "prompt": prompt, "width": p.width, "height": p.height}},
+        }
+        if p.edit_images:
+            g["resize"] = {"class_type": "ImageScale", "inputs": {
+                "image": ["ref0", 0], "upscale_method": "lanczos", "width": p.width, "height": p.height,
+                "crop": "center"}}
+            g["text"]["inputs"].update({f"images.image_{i + 1}": ["resize", 0] if i == 0 else [f"ref{i}", 0]
+                                        for i in range(len(p.edit_images))})
+        if expand:
+            g["upsampler"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": PH3_UPSAMPLER, "type": "minimax"}}
+            g["upsample"] = {"class_type": "TextGenerateV2", "inputs": {
+                "clip": ["upsampler", 0],
+                "prompt": f"Aspect ratio: {_canvas(p.width, p.height)}\nRequest: {p.prompt.strip()}",
+                "max_length": 1536, "sampling_mode": "off", "thinking": True, "use_default_template": True,
+                "mtp": "auto", **({"images.image1": ["resize", 0]} if p.edit_images else {})}}
+            g["show_prompt"] = {"class_type": "PreviewAny", "inputs": {"source": ["upsample", 0]}}
+        model, clip, vae, empty_latent = ["shift", 0], None, ["vae", 0], None
     elif is_minimax_h3(p.checkpoint):
         if p.init_image:
             raise ValueError("MiniMax-H3-Image has no img2img; use the Edit tab")
@@ -852,6 +898,8 @@ def build_workflow(p: Params) -> dict:
         positive, negative = ["pos", 0], ["neg", 0]
     elif is_minimax_h3(p.checkpoint):
         positive, negative = ["text", 0], ["neg", 0]
+    elif is_ph3(p.checkpoint):
+        positive, negative = ["text", 0], None  # guided without a negative (BasicGuider)
     elif (is_firered(p.checkpoint) or is_ideogram(p.checkpoint) or is_krea(p.checkpoint) or is_joyai(p.checkpoint)
             or is_hidream(p.checkpoint) or is_ernie(p.checkpoint) or is_longcat(p.checkpoint) or (is_boogu(p.checkpoint) and not p.edit_images)):
         positive, negative = ["pos", 0], ["neg", 0]
@@ -865,7 +913,9 @@ def build_workflow(p: Params) -> dict:
         positive, negative = ["pos", 0], ["neg", 0]
     for i, name in enumerate(p.edit_images):
         g[f"ref{i}"] = {"class_type": "LoadImage", "inputs": {"image": name}}
-    if p.edit_images:
+    if is_ph3(p.checkpoint):
+        denoise = 1.0  # the conditioning node made the latent
+    elif p.edit_images:
         if is_flux3(p.checkpoint):
             # Each reference is resized to 1 MP and attached to the conditioning (BFL's workflow).
             refs = {f"images.image{i}": [f"ref{i}", 0] for i in range(len(p.edit_images))}
@@ -928,6 +978,14 @@ def build_workflow(p: Params) -> dict:
         g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
             "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
             "sigmas": sigmas, "latent_image": ["latent", 0]}}
+    elif is_ph3(p.checkpoint):
+        g["sigmas"] = {"class_type": "ManualSigmas", "inputs": {"sigmas": PH3_SIGMAS}}
+        g["noise"] = {"class_type": "RandomNoise", "inputs": {"noise_seed": p.seed}}
+        g["guider"] = {"class_type": "BasicGuider", "inputs": {"model": model, "conditioning": positive}}
+        g["sampler"] = {"class_type": "KSamplerSelect", "inputs": {"sampler_name": p.sampler}}
+        g["sample"] = {"class_type": "SamplerCustomAdvanced", "inputs": {
+            "noise": ["noise", 0], "guider": ["guider", 0], "sampler": ["sampler", 0],
+            "sigmas": ["sigmas", 0], "latent_image": ["text", 1]}}
     elif is_ming(p.checkpoint):
         # The templates' sampler: no CFG; edits use LCM with slightly raised noise.
         g["sigmas"] = {"class_type": "BasicScheduler", "inputs": {
@@ -1027,7 +1085,7 @@ class ComfyClient:
 
     def checkpoints(self) -> list[str]:
         """Checkpoints plus the diffusion models Darkroom can build a workflow for (Z-Image, FLUX 3, Qwen-Image,
-        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, Anima, Kandinsky 5, PixelDiT, FireRed Image Edit)."""
+        MOSS-Image, Ideogram 4, Ming Image, Mage-Flow, Krea 2, Fibo 2.0, JoyAI Image Edit, Boogu, Lens, ERNIE-Image, LongCat-Image, MiniMax-H3-Image, P-Image-OSS, Anima, Kandinsky 5, PixelDiT, FireRed Image Edit)."""
         unets = self._choices("UNETLoader", "unet_name")
         lightning = FIRERED_LORA in self._choices("LoraLoaderModelOnly", "lora_name")
         firered = [name for u in unets if is_firered(u) for name in ([u, u + LIGHTNING] if lightning else [u])]
@@ -1035,7 +1093,7 @@ class ComfyClient:
             unets = unets + [u + MOSS_EDIT for u in unets if is_moss(u) and "sft" in u.lower()]
         return self._choices("CheckpointLoaderSimple", "ckpt_name") + [
             u for u in unets if is_zimage(u) or is_flux3(u) or is_qwen_image(u) or is_moss(u) or is_ming(u) or is_mage(u)
-            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
+            or is_krea(u) or is_fibo(u) or is_joyai(u) or is_boogu(u) or is_lens(u) or is_ernie(u) or is_longcat(u) or is_minimax_h3(u) or is_ph3(u) or is_anima(u) or is_kandinsky(u) or is_pixeldit(u) or (is_ideogram(u) and "unconditional" not in u)] + firered
 
     def samplers(self) -> list[str]:
         return self._choices("KSampler", "sampler_name")

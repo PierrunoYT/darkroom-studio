@@ -104,6 +104,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   reuses FireRed's Qwen2.5-VL encoder, SD 3.5's CLIP-L and Z-Image's VAE; the Modal download step fetches the models.
 - PixelDiT 1.3B (NVIDIA, non-commercial), a pixel-space model with no VAE, following ComfyUI's template: 30 er_sde
   steps at CFG 4 with img2img. The Modal download step fetches it and its Gemma 2 2B text encoder.
+- P-Image-OSS (untested), Pruna's distilled MiniMax-H3, following ComfyUI's p-h3-image templates: text-to-image and
+  editing with up to 8 `<Picture N>` images, 8 fixed steps without CFG at about 4 MP, and its prompt upsampler (on by
+  default). It shares MiniMax-H3's license and runs on `modal_h3.py`.
 - MiniMax-H3-Image (untested), following ComfyUI's templates: text-to-image and editing with `<Picture N>`
   references, 6 steps at CFG 1 at about 4 MP, and its Qwen3.5 9B prompt enhancer (on by default). Its license excludes
   the EU, UK, South Korea and the US, so it runs on its own Modal app, `modal_h3.py`, pinned to GPUs in Japan or Canada.
