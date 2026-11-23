@@ -124,6 +124,12 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/LongCat-Image", "split_files/diffusion_models/longcat_image_edit_bf16.safetensors"),
     ("diffusion_models", "Comfy-Org/LongCat-Image",
      "split_files/diffusion_models/longcat_image_edit_turbo_bf16.safetensors"),
+    # Anima Base v1.0, Aesthetic v1.1 and Turbo v1.1 (CircleStone Labs, non-commercial; outputs may be used commercially)
+    # with its Qwen3 0.6B text encoder (about 14 GB). Its VAE is FireRed's Qwen-Image VAE below.
+    ("diffusion_models", "circlestone-labs/Anima", "split_files/diffusion_models/anima-base-v1.0.safetensors"),
+    ("diffusion_models", "circlestone-labs/Anima", "split_files/diffusion_models/anima-aesthetic-v1.1.safetensors"),
+    ("diffusion_models", "circlestone-labs/Anima", "split_files/diffusion_models/anima-turbo-v1.1.safetensors"),
+    ("text_encoders", "circlestone-labs/Anima", "split_files/text_encoders/qwen_3_06b_base.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),

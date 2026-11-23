@@ -352,6 +352,23 @@ any diffusion model whose name contains `longcat_image` and builds the graphs fr
 templates; Edit Turbo has no template and runs the edit graph with its model card's 8 steps at CFG 1. The edit models
 take one image and only edit; the other only generates from text. They render new text in edits poorly.
 
+For [Anima](https://huggingface.co/circlestone-labs/Anima), an anime and illustration model from CircleStone Labs
+and Comfy Org (non-commercial license; the images you make may be used commercially), download (about 14 GB) from
+that repo:
+
+```
+ComfyUI/models/diffusion_models/anima-base-v1.0.safetensors        (30 steps, CFG 4)
+ComfyUI/models/diffusion_models/anima-aesthetic-v1.1.safetensors   (30 steps, CFG 4)
+ComfyUI/models/diffusion_models/anima-turbo-v1.1.safetensors       (8 steps, CFG 1)
+ComfyUI/models/text_encoders/qwen_3_06b_base.safetensors
+```
+
+Its VAE is FireRed's `qwen_image_vae.safetensors`. Darkroom lists any diffusion model whose name starts with `anima-`
+and builds the graph from ComfyUI's Anima Base template, with the Turbo settings from its model card; img2img works
+too. It reads Danbooru-style tags, natural language, or both: start the prompt with `masterpiece, best quality, safe,`
+and use its card's negative, `worst quality, low quality, artist name, blurry, jpeg artifacts, chromatic aberration`.
+It does not do photorealism.
+
 For [MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image), text-to-image and edit in one model,
 **check its license first**: it excludes the EU, the UK, South Korea and the United States, including using or
 displaying its outputs there. Download (about 55 GB) from that repo, [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3)
