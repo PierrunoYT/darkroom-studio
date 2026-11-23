@@ -369,6 +369,20 @@ too. It reads Danbooru-style tags, natural language, or both: start the prompt w
 and use its card's negative, `worst quality, low quality, artist name, blurry, jpeg artifacts, chromatic aberration`.
 It does not do photorealism.
 
+For [Kandinsky 5.0 Image Lite](https://huggingface.co/kandinskylab/Kandinsky-5.0-T2I-Lite) from Kandinsky Lab (MIT),
+download (about 24 GB) from that repo and
+[Kandinsky-5.0-T2I-Lite-pretrain](https://huggingface.co/kandinskylab/Kandinsky-5.0-T2I-Lite-pretrain):
+
+```
+ComfyUI/models/diffusion_models/kandinsky5lite_t2i.safetensors            (SFT, 50 steps, CFG 3.5)
+ComfyUI/models/diffusion_models/kandinsky5lite_t2i_pretrain.safetensors   (pretrain, the same settings)
+```
+
+It uses FireRed's `qwen_2.5_vl_7b_fp8_scaled.safetensors` and SD 3.5's `clip_l.safetensors` as text encoders and
+Z-Image's `ae.safetensors` VAE. Darkroom lists any diffusion model whose name contains `kandinsky5lite_t2i` and builds
+the graph from ComfyUI's template; img2img works too. ComfyUI cannot run the I2I (edit) checkpoint, so Darkroom leaves
+it out.
+
 For [MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image), text-to-image and edit in one model,
 **check its license first**: it excludes the EU, the UK, South Korea and the United States, including using or
 displaying its outputs there. Download (about 55 GB) from that repo, [Comfy-Org/MiniMax-H3](https://huggingface.co/Comfy-Org/MiniMax-H3)

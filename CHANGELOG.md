@@ -100,6 +100,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Anima Base v1.0, Aesthetic v1.1 and Turbo v1.1 (CircleStone Labs, non-commercial), an anime and illustration model:
   ComfyUI's Base template at 30 steps and CFG 4, Turbo at 8 steps and CFG 1 from its model card, with img2img. It reuses
   FireRed's VAE; the Modal download step fetches the models and the Qwen3 0.6B text encoder.
+- Kandinsky 5.0 Image Lite SFT and pretrain (MIT), following ComfyUI's template: 50 steps at CFG 3.5 with img2img. It
+  reuses FireRed's Qwen2.5-VL encoder, SD 3.5's CLIP-L and Z-Image's VAE; the Modal download step fetches the models.
 - MiniMax-H3-Image (untested), following ComfyUI's templates: text-to-image and editing with `<Picture N>`
   references, 6 steps at CFG 1 at about 4 MP, and its Qwen3.5 9B prompt enhancer (on by default). Its license excludes
   the EU, UK, South Korea and the US, so it runs on its own Modal app, `modal_h3.py`, pinned to GPUs in Japan or Canada.

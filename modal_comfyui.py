@@ -130,6 +130,10 @@ MODELS = [
     ("diffusion_models", "circlestone-labs/Anima", "split_files/diffusion_models/anima-aesthetic-v1.1.safetensors"),
     ("diffusion_models", "circlestone-labs/Anima", "split_files/diffusion_models/anima-turbo-v1.1.safetensors"),
     ("text_encoders", "circlestone-labs/Anima", "split_files/text_encoders/qwen_3_06b_base.safetensors"),
+    # Kandinsky 5.0 Image Lite SFT and pretrain (MIT), about 24 GB. They use FireRed's Qwen2.5-VL encoder, SD 3.5's
+    # CLIP-L and Z-Image's VAE.
+    ("diffusion_models", "kandinskylab/Kandinsky-5.0-T2I-Lite", "model/kandinsky5lite_t2i.safetensors"),
+    ("diffusion_models", "kandinskylab/Kandinsky-5.0-T2I-Lite-pretrain", "model/kandinsky5lite_t2i_pretrain.safetensors"),
     # FireRed Image Edit 1.1 (edit only) with its 8-step Lightning LoRA, as in ComfyUI's template (about 48 GB).
     # Apache 2.0.
     ("diffusion_models", "FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI", "FireRed-Image-Edit-1.1-transformer.safetensors"),

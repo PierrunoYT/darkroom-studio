@@ -13,7 +13,7 @@ from websocket import WebSocketException
 
 from darkroom.comfy import (FIRERED_MAX_IMAGES, JOYAI_MAX_IMAGES, LIGHTNING, LONGCAT_MAX_IMAGES, MAGE_MAX_IMAGES, MING_MAX_IMAGES, ComfyClient, ComfyError, Params, build_workflow, can_edit,
                             can_expand, is_firered, is_flux3, is_ideogram, is_moss, is_qwen_image, is_qwen_turbo,
-                            is_anima, is_boogu, is_edit_only, is_ernie, is_minimax_h3, is_fibo, is_hidream, is_joyai, is_lens, is_longcat, is_krea, is_mage, is_ming, is_sd3,
+                            is_anima, is_kandinsky, is_boogu, is_edit_only, is_ernie, is_minimax_h3, is_fibo, is_hidream, is_joyai, is_lens, is_longcat, is_krea, is_mage, is_ming, is_sd3,
                             is_zimage)
 
 DEFAULT_URL = os.environ.get("COMFYUI_URL", "http://127.0.0.1:8188")
@@ -110,6 +110,8 @@ def _preset(model: str):
         return 1024, 20, 4, "euler", "simple"
     if is_ernie(model):  # ComfyUI's ERNIE-Image templates
         return (1024, 8, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 20, 4, "euler", "simple")
+    if is_kandinsky(model):  # ComfyUI's Kandinsky 5 template
+        return 1024, 50, 3.5, "euler", "simple"
     if is_anima(model):  # ComfyUI's Anima Base v1.0 template; Turbo: its model card's 8 steps at CFG 1
         return (1024, 8, 1, "euler", "simple") if "turbo" in model.lower() else (1024, 30, 4, "euler", "simple")
     if is_minimax_h3(model):  # ComfyUI's MiniMax-H3-Image templates (4 MP; the model is tuned for 4 to 20 MP)
