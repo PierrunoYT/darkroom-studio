@@ -191,10 +191,13 @@ above). Turn it off only when you write the JSON yourself; see Ideogram's
 [prompting guide](https://github.com/ideogram-oss/ideogram4/blob/main/docs/prompting.md). Ideogram 4 is under the
 Ideogram **non-commercial** model agreement.
 
-For Ming Image 0.1 Design, a 6B model from inclusionAI tuned for UI screens, posters, infographics and other
-text-heavy layouts (MIT), download (about 26 GB) from [Comfy-Org/Ming-Image](https://huggingface.co/Comfy-Org/Ming-Image):
+For Ming Image 0.1 and 0.2 Design, 6B models from inclusionAI tuned for UI screens, posters, infographics and other
+text-heavy layouts (MIT), download (about 26 GB per version) from [Comfy-Org/Ming-Image](https://huggingface.co/Comfy-Org/Ming-Image).
+Each version needs its own text encoder; the VAE is shared:
 
 ```
+ComfyUI/models/diffusion_models/ming_image_0.2_design_int8_convrot.safetensors
+ComfyUI/models/text_encoders/ming_image_0.2_ling_mini_2.0_int8_convrot.safetensors
 ComfyUI/models/diffusion_models/ming_image_0.1_design_int8_convrot.safetensors
 ComfyUI/models/text_encoders/ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors
 ComfyUI/models/vae/ming_image_vae_bf16.safetensors

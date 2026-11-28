@@ -132,10 +132,12 @@ def is_moss_edit(model: str) -> bool:
     return is_moss(model) and model.endswith(MOSS_EDIT)
 
 
-# Ming Image 0.1 Design, as in ComfyUI's templates (MIT): a 6B model for UI, posters and other text-heavy layouts.
-# Text-to-image runs the authors' rewriter first; the template runs it on Qwen3.8 27B, which generates about one token
-# a second on an L40S, so Darkroom runs it on MOSS-Image's Qwen3.5 9B. Edits take up to 8 images and sample with LCM.
-MING_TEXT_ENCODER = "ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors"
+# Ming Image 0.1 and 0.2 Design, as in ComfyUI's templates (MIT): a 6B model for UI, posters and other text-heavy
+# layouts. Text-to-image runs the authors' rewriter first; the template runs it on Qwen3.8 27B, which generates about
+# one token a second on an L40S, so Darkroom runs it on MOSS-Image's Qwen3.5 9B. Edits take up to 8 images and sample
+# with LCM. Each version has its own text encoder (0.2 retrained the connector); the VAE is shared.
+MING_TEXT_ENCODERS = {"0.1": "ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors",
+                      "0.2": "ming_image_0.2_ling_mini_2.0_int8_convrot.safetensors"}
 MING_VAE = "ming_image_vae_bf16.safetensors"
 MING_ENHANCER_PROMPT = files("darkroom").joinpath("ming_image_pe_prompt.txt").read_text(encoding="utf-8").strip()
 MING_MAX_IMAGES = 8
@@ -143,6 +145,10 @@ MING_MAX_IMAGES = 8
 
 def is_ming(model: str) -> bool:
     return "ming_image" in model.lower()
+
+
+def ming_text_encoder(model: str) -> str:
+    return MING_TEXT_ENCODERS["0.2" if "ming_image_0.2" in model.lower() else "0.1"]
 
 
 # Mage-Flow (Microsoft, MIT), as in ComfyUI's templates. Text-to-image and edit are separate checkpoints, each with a
@@ -600,7 +606,8 @@ def build_workflow(p: Params) -> dict:
                 "model": ["unet", 0], "attention": "comfy kitchen attention"}},
             "shift": {"class_type": "ModelSamplingFlux", "inputs": {
                 "model": ["attn", 0], "max_shift": 1.15, "base_shift": 0.5, "width": p.width, "height": p.height}},
-            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": MING_TEXT_ENCODER, "type": "qwen_image"}},
+            "clip": {"class_type": "CLIPLoader", "inputs": {"clip_name": ming_text_encoder(p.checkpoint),
+                                                           "type": "qwen_image"}},
             "vae": {"class_type": "VAELoader", "inputs": {"vae_name": MING_VAE}},
         }
         if p.edit_images:

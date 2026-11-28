@@ -66,10 +66,12 @@ MODELS = [
     ("diffusion_models", "Comfy-Org/Ideogram-4", "diffusion_models/ideogram4_fp8_scaled.safetensors"),
     ("diffusion_models", "Comfy-Org/Ideogram-4", "diffusion_models/ideogram4_unconditional_fp8_scaled.safetensors"),
     ("text_encoders", "Comfy-Org/Ideogram-4", "text_encoders/qwen3vl_8b_fp8_scaled.safetensors"),
-    # Ming Image 0.1 Design (int8, as in ComfyUI's template) with its Ling text encoder (about 26 GB). MIT. Its prompt
-    # rewriter runs on MOSS-Image's Qwen3.5 9B text encoder.
+    # Ming Image 0.1 and 0.2 Design (int8, as in ComfyUI's template), each with its own Ling text encoder (about 26 GB
+    # each). MIT. Its prompt rewriter runs on MOSS-Image's Qwen3.5 9B text encoder.
     ("diffusion_models", "Comfy-Org/Ming-Image", "diffusion_models/ming_image_0.1_design_int8_convrot.safetensors"),
     ("text_encoders", "Comfy-Org/Ming-Image", "text_encoders/ming_image_0.1_ling_mini_2.0_int8_convrot.safetensors"),
+    ("diffusion_models", "Comfy-Org/Ming-Image", "diffusion_models/ming_image_0.2_design_int8_convrot.safetensors"),
+    ("text_encoders", "Comfy-Org/Ming-Image", "text_encoders/ming_image_0.2_ling_mini_2.0_int8_convrot.safetensors"),
     ("vae", "Comfy-Org/Ming-Image", "vae/ming_image_vae_bf16.safetensors"),
     # Mage-Flow (Microsoft, MIT), int8 as in ComfyUI's templates: text-to-image and edit, base and Turbo (about 26 GB).
     # Its Qwen3-VL 4B encoder differs from FLUX 3's file of the same name, so it is stored under its own name.

@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Ming Image 0.2 Design (MIT), with its own Ling text encoder; it uses the same graph as 0.1.
 - Z-Image Turbo support, following ComfyUI's official workflow: the model list includes `z_image` diffusion
   models, which load with the Qwen 3 4B text encoder and the `ae` VAE, for txt2img and img2img.
 - Model presets: picking a model sets its recommended base resolution, steps, CFG, sampler and scheduler
